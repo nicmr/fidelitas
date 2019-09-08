@@ -1,0 +1,10 @@
+[package]
+name = "fidelitas"
+version = "0.1.0"
+authors = ["Nicolas Mohr <Nico.Mohr@gmx.net>"]
+edition = "2018"
+build = "elm-make.rs"
+
+[dependencies]
+actix-web = "1.0"
+actix-files = "0.1.4"
