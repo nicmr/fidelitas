@@ -28,7 +28,7 @@ fn main() {
             .route("/", web::get().to(index))
             .route("/hello", web::get().to(hello))
     })
-    .bind(format!("127.0.0.1:{}", port))
+    .bind(format!("0.0.0.0:{}", port))
     .unwrap()
     .run()
     .unwrap();
