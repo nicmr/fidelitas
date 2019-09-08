@@ -6,3 +6,5 @@
 elm-stuff
 # elm-repl generated files
 repl-temp-*
+# generated html file
+index.html
