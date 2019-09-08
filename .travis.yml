@@ -7,8 +7,9 @@ cache:
   - apt
 
 env:
-  - GITHUB_RELEASE_TITLE=Travis_build_#${TRAVIS_BUILD_NUMBER} 
-  - SKIP_ELM=TRUE
+  global:
+    - GITHUB_RELEASE_TITLE=Travis_build_#${TRAVIS_BUILD_NUMBER} 
+    - SKIP_ELM=TRUE
 
 install:
   - npm install -g elm
