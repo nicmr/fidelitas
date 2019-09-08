@@ -1,0 +1,13 @@
+language: rust
+rust:
+  - stable
+
+cache: cargo
+
+install:
+  - npm i elm
+
+script:
+  - cargo build --verbose --all
+  - cargo test --verbose --all
+  - elm make
