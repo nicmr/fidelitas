@@ -2,12 +2,45 @@ language: rust
 rust:
   - stable
 
-cache: cargo
+cache:
+  - cargo
+  - apt
 
 install:
   - npm i elm
+  - rustup target add armv7-unknown-linux-gnueabihf
+  - sudo apt-get install gcc-arm-linux-gnueabihf
+  # possibly needed for crosscompile
+  # - sudo apt-get install g++-arm-linux-gnueabihf
+  # - sudo apt-get install libc6-armel-cross libc6-dev-armel-cross binutils-arm-linux-gnueabi
 
 script:
-  - cargo build --verbose --all
   - cargo test --verbose --all
+  - cargo build --verbose --all
+  - cargo build --verbose --all --target=armv7-unknown-linux-gnueabihf
   - elm make
+
+before_deploy:
+  # package files for x64 release
+  - mkdir linux_x64
+  - cp target/debug/fidelitas linux_x64/
+  - cp index.html linux_x64/
+  - tar -zcvf fidelitas_linux_x64.tar.gz linux_x64
+
+  # package files for armv7 release
+  - mkdir linux_armv7
+  - cp target/armv7-unknown-linux-gnueabihf/debug/fidelitas linux_armv7
+  - cp index.html linux_x64
+  - tar -zcvf fidelitas_linux_armv7.tar.gz linux_armv7
+
+deploy:
+  provider: releases
+  skip_cleanup: true
+  api_key: ""
+  file:
+  - "fidelitas_linux_x64.tar.gz"
+  - "fidelitas_linux_armv7.tar.gz"
+  title: "Travis build #"+$TRAVIS_BUILD_NUMBER
+  body: "Commit hash of this build: "+$TRAVIS_COMMIT
+  on:
+    branch: master
