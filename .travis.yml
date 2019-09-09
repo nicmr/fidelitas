@@ -20,13 +20,16 @@ install:
   
   # apt dependencies
   - sudo apt-get update
+  - sudo apt-get install build-essential
   - sudo apt-get install gcc-arm-linux-gnueabihf # required for linking
-  # - sudo apt-get install binutils-arm-linux-gnueabihf # possibly required for ar for backtrace.rs / libbacktrace
-  - sudo apt-get install libc6-dev-armhf-cross libc6-dev # used by backtrace.rs CI config - may fix the issue?
+ 
   - arm-linux-gnueabihf-gcc --version # check if the gcc has been correctly installed
-  - sudo apt-get install g++-multilib # required for cross compile headers
+
+  # - sudo apt-get install binutils-arm-linux-gnueabihf # possibly required for ar for backtrace.rs / libbacktrace
+  # - sudo apt-get install libc6-dev-armhf-cross libc6-dev # used by backtrace.rs CI config - may fix the issue?
 
 script:
+  - arm-linux-gnueabihf-gcc --version # check if the gcc has been correctly installed
   - cargo build --release --verbose --all
   - cargo test --verbose --all
   - cargo build --release --verbose --all --target=armv7-unknown-linux-gnueabihf
