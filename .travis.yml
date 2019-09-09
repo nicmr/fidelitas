@@ -20,6 +20,9 @@ install:
   # - sudo apt-get install g++-arm-linux-gnueabihf
   # - sudo apt-get install libc6-armel-cross libc6-dev-armel-cross binutils-arm-linux-gnueabi
 
+before_script:
+  - arm-linux-gnueabihf-gcc --version
+
 script:
   - cargo build --verbose --all
   - cargo test --verbose --all
