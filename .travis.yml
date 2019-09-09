@@ -15,20 +15,14 @@ install:
   # for elm support
   - npm install -g elm
 
-  # for debugging apt dependencies
-  - sudo apt-get install apt-file
-
   # for crosscompilation
   - rustup target add armv7-unknown-linux-gnueabihf
-  #
-  - sudo apt-get install gcc-arm-linux-gnueabihf
-  - apt-file update
-  - apt-file search arm-linux-gnueabihf-gcc
-  - arm-linux-gnueabihf-gcc --version
-  - sudo apt-get install g++-multilib
-
-before_script:
-  - arm-linux-gnueabihf-gcc --version
+  
+  # apt dependencies
+  - sudo apt-get update
+  - sudo apt-get install gcc-arm-linux-gnueabihf # required for linking
+  - arm-linux-gnueabihf-gcc --version # check if the gcc has been correctly installed
+  - sudo apt-get install g++-multilib # required for cross compile headers
 
 script:
   - cargo build --verbose --all
