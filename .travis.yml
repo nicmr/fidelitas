@@ -15,13 +15,13 @@ install:
   # for elm support
   - npm install -g elm
 
-  # for cross-compilation
+  # rust target for cross-compilation
   - rustup target add armv7-unknown-linux-gnueabihf
   
   # apt dependencies for cross-compilation
   - sudo apt-get update
   - sudo apt-get install build-essential
-  - sudo apt-get install gcc-arm-linux-gnueabihf # required for linking
+  - sudo apt-get install gcc-arm-linux-gnueabihf
   - sudo apt-get install libc6-dev-armhf-cross
  
   - arm-linux-gnueabihf-gcc --version # check if the gcc has been correctly installed
@@ -31,8 +31,8 @@ script:
   - cargo build --release --verbose --all
   - cargo test --verbose --all
   - elm make elm-src/Main.elm
-  - cargo build --verbose --all --target=armv7-unknown-linux-gnueabihf # cross-compilation still broken
-  - cargo build --release --verbose --all --target=armv7-unknown-linux-gnueabihf # cross-compilation still broken
+  - cargo build --verbose --all --target=armv7-unknown-linux-gnueabihf
+  - cargo build --release --verbose --all --target=armv7-unknown-linux-gnueabihf
 before_deploy:
   # package files for x64 release
   - mkdir linux_x64
@@ -40,12 +40,11 @@ before_deploy:
   - cp index.html linux_x64/
   - tar -zcvf fidelitas_linux_x64.tar.gz linux_x64
 
-  # cross-compilation still broken
   # package files for armv7 release
-  # - mkdir linux_armv7
-  # - cp target/armv7-unknown-linux-gnueabihf/debug/fidelitas linux_armv7
-  # - cp index.html linux_x64
-  # - tar -zcvf fidelitas_linux_armv7.tar.gz linux_armv7
+  - mkdir linux_armv7
+  - cp target/armv7-unknown-linux-gnueabihf/debug/fidelitas linux_armv7
+  - cp index.html linux_x64
+  - tar -zcvf fidelitas_linux_armv7.tar.gz linux_armv7
 
 deploy:
   provider: releases
@@ -53,7 +52,7 @@ deploy:
   api_key: $GITHUB_ACCESS_TOKEN 
   file:
   - "fidelitas_linux_x64.tar.gz"
-  # - "fidelitas_linux_armv7.tar.gz" # cross compilation still broken
+  - "fidelitas_linux_armv7.tar.gz"
   title: $GITHUB_RELEASE_TITLE
   on:
     branch: master
