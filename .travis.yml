@@ -26,6 +26,9 @@ install:
  
   - arm-linux-gnueabihf-gcc --version # check if the gcc has been correctly installed
 
+  # application-specific apt dependencies
+  - sudo apt-get install libvlc-dev
+
 
 script:
   - cargo build --release --verbose --all
