@@ -8,3 +8,6 @@ build = "elm-make.rs"
 [dependencies]
 actix-web = "1.0"
 actix-files = "0.1.4"
+vlc-rs = "0.3"
+crossbeam-channel = "0.3.9"
+crossbeam-utils = "0.6"
