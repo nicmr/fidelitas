@@ -105,7 +105,21 @@ fn api_resume((_req, state): (HttpRequest, web::Data<AppState>)) -> impl Respond
 
 
 fn main() {
-    let port = "8088";
+
+    let matches = clap::App::new("Fidelitas")
+        .version("0.1")
+        .author("Nicolas Mohr <Nico.Mohr@gmx.net")
+        .about("Network audio player")
+        .arg(clap::Arg::with_name("port")
+            .default_value("8088")
+            .short("p")
+            .long("port")
+            .value_name("PORT")
+            .help("Specifies the port the server will listen on")
+            .takes_value(true))
+        .get_matches();
+
+    let port = matches.value_of("port").unwrap();
     println!("Listening on port: {}...", port);
 
 
