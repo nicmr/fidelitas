@@ -5,14 +5,12 @@ use actix_web::{HttpRequest, Result};
 use std::path::PathBuf;
 use vlc;
 use std::thread;
-// use std::sync::Mutex;
 
 use crossbeam_channel;
 
 
 
 struct AppState {
-    // counter: Mutex<i32>,
     sender: crossbeam_channel::Sender<PlayerMessage>,
 }
 
@@ -32,18 +30,6 @@ fn index(_req: HttpRequest) -> Result<NamedFile> {
 }
 
 fn api_play((_req, state): (HttpRequest, web::Data<AppState>)) -> impl Responder {
-    // let command = req.match_info().query("command");
-    // let file = req.match_info().query("file");
-    // println!("about to {} file {}", command, file);
-
-    // let vlc_instance = vlc::Instance::new().unwrap();
-    // let md = vlc::Media::new_path(&vlc_instance, file).unwrap();
-    // let mdp = vlc::MediaPlayer::new(&vlc_instance).unwrap();
-    // mdp.set_media(&md);
-    // mdp.play().unwrap();
-    // thread::sleep(std::time::Duration::from_secs(10));
-
-    // HttpResponse::Ok().body("success")
 
     let track_name = String::from("Xi-FreedomDive.mp3");
 
@@ -92,17 +78,6 @@ fn api_resume((_req, state): (HttpRequest, web::Data<AppState>)) -> impl Respond
         }
     }
 }
-
-
-
-
-// fn api_test(data: web::Data<AppState>) -> String {
-//     let mut counter = data.counter.lock().unwrap(); // <- get counter's MutexGuard
-//     *counter += 1; // <- access counter inside MutexGuard
-//     format!("Request number: {}", counter)
-// }
-
-
 
 fn main() {
 
@@ -154,9 +129,7 @@ fn main() {
         }
     });
 
-     // TODO: use mpsc instead of mutex?
     let app_state = web::Data::new(AppState {
-        // counter: Mutex::new(0),
         sender: sender,
     });
 
