@@ -1,12 +1,16 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_files::NamedFile;
 use actix_web::{HttpRequest, Result};
+use actix_web_actors::ws;
+use actix::{Actor, StreamHandler};
 
 use std::path::PathBuf;
 use vlc;
 use std::thread;
 
 use crossbeam_channel;
+
+use lazy_static;
 
 
 
@@ -21,6 +25,34 @@ enum PlayerMessage {
     Stop
 }
 
+impl std::convert::TryFrom<String> for PlayerMessage {
+    type Error = &'static str;
+
+    fn try_from(text: String) -> Result<Self, Self::Error> {
+        use regex::Regex;
+
+        lazy_static::lazy_static! {
+            static ref RE_PLAY: Regex = Regex::new(r"Play;(\w+)").unwrap();
+        }
+
+        if text == "Pause" {
+            Ok(PlayerMessage::Pause)
+        } else if text == "Resume" {
+            Ok(PlayerMessage::Resume)
+        } else if text == "Stop" {
+            Ok(PlayerMessage::Stop)
+        } else if let Some(caps) = RE_PLAY.captures(&text) {
+            if let Some(s) = caps.get(1) {
+                Ok(PlayerMessage::Play(s.as_str().to_string()))
+            } else {
+                Err("Cannot convert passed string to PlayerMessage.")
+            }
+        } else {
+            Err("Cannot convert passed string to PlayerMessage.")
+        }
+    }
+}
+
 
 fn index(_req: HttpRequest) -> Result<NamedFile> {
     // let path: PathBuf = req.match_info().query("~/Code/rust/fidelitas/index.html").parse().unwrap();
@@ -28,6 +60,34 @@ fn index(_req: HttpRequest) -> Result<NamedFile> {
     
     Ok(NamedFile::open(path)?)
 }
+
+struct PlayerWs;
+
+impl Actor for PlayerWs {
+    type Context = ws::WebsocketContext<Self>;
+}
+
+impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
+    fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
+        use std::convert::TryFrom;
+
+        match msg {
+            ws::Message::Ping(msg) => ctx.pong(&msg),
+            ws::Message::Text(text) => {
+                match PlayerMessage::try_from(text) {
+                    Ok(_) => ctx.text("Ok"),
+                    Err(_) => ctx.text("Err")
+                }
+            }
+            _ => (),
+        }
+    }
+}
+
+// fn api_ws(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
+//     let resp = ws::start();
+//     resp
+// }
 
 fn api_play((_req, state): (HttpRequest, web::Data<AppState>)) -> impl Responder {
 
