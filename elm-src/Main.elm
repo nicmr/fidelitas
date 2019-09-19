@@ -1,8 +1,10 @@
+port module Main exposing (main)
+
 import Browser
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Http
-import Url.Builder exposing (absolute)
+import Url.Builder exposing (absolute, crossOrigin)
 
 main =
   Browser.element
@@ -13,9 +15,11 @@ main =
   }
 
 
+port websocketIn : (String -> msg) -> Sub msg
+port websocketOut : String -> Cmd msg
 -- Msg
 
-type Msg = Increment | Decrement | Play  | Pause | Resume | Stop | DataReceived (Result Http.Error String)
+type Msg = Increment | Decrement | Play  | Pause | Resume | Stop | DataReceived (Result Http.Error String) | WebsocketIn String
 
 
 -- Model 
@@ -23,6 +27,8 @@ type Msg = Increment | Decrement | Play  | Pause | Resume | Stop | DataReceived 
 type alias Model =
   { counter: Int
   , player_state: PlayerState
+  , responses: List String
+  , input: String
   }
 
 type PlayerState = Paused
@@ -32,6 +38,8 @@ init _ =
   (
     { counter = 0
     , player_state = Paused
+    , responses = []
+    , input = ""
     }
     , Cmd.none
   )
@@ -47,7 +55,8 @@ update msg model =
     Decrement ->
       ( { model | counter = model.counter - 1}, Cmd.none )
     Play ->
-      ( model, Http.get { url = absolute ["api", "play", "something"] [], expect = Http.expectString DataReceived})
+      -- ( model, Http.get { url = absolute ["api", "play", "something"] [], expect = Http.expectString DataReceived})
+      (model, websocketOut "Play;something")
     DataReceived result ->
       ( model, Cmd.none )
     Pause ->
@@ -56,14 +65,15 @@ update msg model =
       ( model, Http.get { url = absolute ["api", "resume"] [], expect = Http.expectString DataReceived})
     Stop ->
       ( model, Http.get { url = absolute ["api", "stop"] [], expect = Http.expectString DataReceived})
-
+    WebsocketIn value ->
+      (model, Cmd.none )
 
 
 -- Subscriptions
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Sub.none
+  websocketIn WebsocketIn
 
 
 -- View

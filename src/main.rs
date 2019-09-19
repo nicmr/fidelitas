@@ -61,6 +61,13 @@ fn index(_req: HttpRequest) -> Result<NamedFile> {
     Ok(NamedFile::open(path)?)
 }
 
+fn controls(_req: HttpRequest) -> Result<NamedFile> {
+    // let path: PathBuf = req.match_info().query("~/Code/rust/fidelitas/index.html").parse().unwrap();
+    let path: PathBuf = PathBuf::from("controls.js");
+    
+    Ok(NamedFile::open(path)?)
+}
+
 struct PlayerWs {
     sender: crossbeam_channel::Sender<PlayerMessage>,
 }
@@ -219,6 +226,10 @@ fn main() {
                     .route("resume", web::get().to(api_resume))
                     .route("stop", web::get().to(api_stop))
                     .route("ws", web::get().to(api_websocket))
+            )
+            .service(
+                web::scope("static")
+                    .route("controls.js", web::get().to(controls))
             )
 
     })
