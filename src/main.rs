@@ -61,7 +61,9 @@ fn index(_req: HttpRequest) -> Result<NamedFile> {
     Ok(NamedFile::open(path)?)
 }
 
-struct PlayerWs;
+struct PlayerWs {
+    sender: crossbeam_channel::Sender<PlayerMessage>,
+}
 
 impl Actor for PlayerWs {
     type Context = ws::WebsocketContext<Self>;
@@ -75,13 +77,23 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
             ws::Message::Ping(msg) => ctx.pong(&msg),
             ws::Message::Text(text) => {
                 match PlayerMessage::try_from(text) {
-                    Ok(_) => ctx.text("Ok"),
-                    Err(_) => ctx.text("Err")
+                    Ok(player_msg) => {
+                        // TODO: handle send() result
+                        self.sender.send(player_msg);
+                        ctx.text("Ok");
+                    },
+                    Err(_) => ctx.text("Err"),
                 }
             }
             _ => (),
         }
     }
+}
+
+fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::Payload) -> Result<HttpResponse, actix_web::Error> {
+    let resp = ws::start(PlayerWs{ sender: state.sender.clone() }, &req, stream);
+    println!("{:?}", resp);
+    resp
 }
 
 // fn api_ws(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
@@ -198,7 +210,7 @@ fn main() {
             .register_data(app_state.clone())
             .service(
                 web::scope("player")
-                    .route("/", web::get().to(index))
+                    .route("", web::get().to(index))
             )
             .service(
                 web::scope("api")
@@ -206,7 +218,9 @@ fn main() {
                     .route("pause", web::get().to(api_pause))
                     .route("resume", web::get().to(api_resume))
                     .route("stop", web::get().to(api_stop))
+                    .route("ws", web::get().to(api_websocket))
             )
+
     })
     .bind(format!("0.0.0.0:{}", port))
     .unwrap()
