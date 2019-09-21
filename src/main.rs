@@ -4,8 +4,10 @@ use actix_web_actors::ws;
 use actix::{Actor, StreamHandler, Addr};
 
 use std::path::{Path, PathBuf};
-use vlc;
 use std::thread;
+use std::collections::HashSet;
+
+use vlc;
 
 use crossbeam_channel;
 
@@ -27,7 +29,8 @@ enum PlayerMessage {
     Pause,
     Resume,
     Stop,
-    Register(Addr<PlayerWs>)
+    Register(Addr<PlayerWs>),
+    Unregister(Addr<PlayerWs>),
 }
 
 impl std::convert::TryFrom<String> for PlayerMessage {
@@ -115,11 +118,12 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
             ws::Message::Text(text) => {
                 match PlayerMessage::try_from(text) {
                     Ok(player_msg) => {
-                        // TODO: handle send() result
-                        self.sender.send(player_msg);
-                        ctx.text("Ok");
+                        match self.sender.send(player_msg){
+                            Ok(()) => ctx.text("Ok"),
+                            Err(_) => ctx.text("Err: Failed to pass message to player")
+                        }
                     },
-                    Err(_) => ctx.text("Err"),
+                    Err(_) => ctx.text("Err: Invalid message"),
                 }
             }
             _ => (),
@@ -131,7 +135,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
         use actix::ActorContext;
 
         let addr = ctx.address();
-        match self.sender.send(PlayerMessage::Register(addr)) {
+        match self.sender.send(PlayerMessage::Unregister(addr)) {
             Ok(()) => {
                 println!("Ws unregistered");
             },
@@ -143,9 +147,19 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
     }
 }
 
-
+#[derive(Clone, Debug)]
 struct WsOutgoingMsg {
     text: String,
+    kind: WsOutGoingMsgKind,
+}
+
+#[derive(Clone, Debug)]
+enum WsOutGoingMsgKind {
+    Play,
+    Pause,
+    Resume,
+    Stop,
+    FsChange,
 }
 
 
@@ -168,6 +182,22 @@ fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::
     let resp = ws::start(PlayerWs{ sender: state.sender.clone() }, &req, stream);
     println!("{:?}", resp);
     resp
+}
+
+
+
+
+
+
+fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msg: WsOutgoingMsg) {
+    for conn in connections {
+        match conn.try_send(
+            msg.clone()
+        ){
+            Ok(_) => {},
+            Err(_) => {println!("Failed to send: ")}
+        }
+    }
 }
 
 
@@ -204,6 +234,7 @@ fn main() {
     let port = matches.value_of("port").unwrap();
     println!("Listening on port: {}...", port);
 
+
     
 
 
@@ -213,7 +244,7 @@ fn main() {
         let vlc_instance = vlc::Instance::new().unwrap();
         let mediaplayer = vlc::MediaPlayer::new(&vlc_instance).unwrap();
 
-        let mut ws_connections: Vec::<Addr<PlayerWs>> = Vec::new();
+        let mut ws_connections: HashSet<Addr<PlayerWs>> = HashSet::new();
 
         loop {
             match receiver.recv() {
@@ -224,28 +255,25 @@ fn main() {
                             let md = vlc::Media::new_path(&vlc_instance, track_name).unwrap();
                             mediaplayer.set_media(&md);
                             mediaplayer.play().unwrap();
+                            broadcast(&ws_connections, WsOutgoingMsg{text: String::from("Somebody else played a new track."), kind: WsOutGoingMsgKind::Play});
                         },
                         PlayerMessage::Pause => {
                             mediaplayer.pause();
-                            for conn in &mut ws_connections {
-                                match conn.try_send(
-                                    WsOutgoingMsg{
-                                        text: String::from("Somebody else paused.")
-                                    }
-                                ){
-                                    Ok(_) => {},
-                                    Err(_) => {println!("Failed to send: ")}
-                                }
-                            }
-                        },
+                            broadcast(&ws_connections, WsOutgoingMsg{text: String::from("Somebody else paused."), kind: WsOutGoingMsgKind::Pause});
+                        }, 
                         PlayerMessage::Resume => {
                             mediaplayer.play().unwrap();
+                            broadcast(&ws_connections, WsOutgoingMsg{text: String::from("Somebody else resumed."), kind: WsOutGoingMsgKind::Resume});
                         },
                         PlayerMessage::Stop => {
                             mediaplayer.stop();
+                            broadcast(&ws_connections, WsOutgoingMsg{text: String::from("Somebody else stopped."), kind: WsOutGoingMsgKind::Stop});
                         },
                         PlayerMessage::Register(ws) => {
-                            ws_connections.push(ws);
+                            ws_connections.insert(ws);
+                        },
+                        PlayerMessage::Unregister(ws) => {
+                            ws_connections.remove(&ws);
                         },
                     }
                 },
