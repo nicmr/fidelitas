@@ -19,7 +19,7 @@ port websocketIn : (String -> msg) -> Sub msg
 port websocketOut : String -> Cmd msg
 -- Msg
 
-type Msg = Increment | Decrement | Play  | Pause | Resume | Stop | DataReceived (Result Http.Error String) | WebsocketIn String
+type Msg = Increment | Decrement | Play  | Pause | Resume | Stop | WebsocketIn String
 
 
 -- Model 
@@ -57,14 +57,12 @@ update msg model =
     Play ->
       -- ( model, Http.get { url = absolute ["api", "play", "something"] [], expect = Http.expectString DataReceived})
       (model, websocketOut "Play;something")
-    DataReceived result ->
-      ( model, Cmd.none )
     Pause ->
-      ( model, Http.get { url = absolute ["api", "pause"] [], expect = Http.expectString DataReceived})
+      (model, websocketOut "Pause")
     Resume ->
-      ( model, Http.get { url = absolute ["api", "resume"] [], expect = Http.expectString DataReceived})
+      (model, websocketOut "Resume")
     Stop ->
-      ( model, Http.get { url = absolute ["api", "stop"] [], expect = Http.expectString DataReceived})
+      (model, websocketOut "Stop")
     WebsocketIn value ->
       (model, Cmd.none )
 
