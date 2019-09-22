@@ -5,18 +5,17 @@ use actix::{Actor, StreamHandler, Addr};
 
 use std::path::{Path, PathBuf};
 use std::thread;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use vlc;
 
 use crossbeam_channel;
 
+use regex::Regex;
 use lazy_static;
 
-
-// Http API, deprecated in favour of websocket api
-mod httpapi;
-
+// use serde::{Serialize};
+use serde_json;
 
 type BasicError = &'static str;
 
@@ -25,7 +24,7 @@ pub struct AppState {
 }
 
 enum PlayerMessage {
-    Play(String),
+    Play(u64),
     Pause,
     Resume,
     Stop,
@@ -37,10 +36,9 @@ impl std::convert::TryFrom<String> for PlayerMessage {
     type Error = &'static str;
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
-        use regex::Regex;
 
         lazy_static::lazy_static! {
-            static ref RE_PLAY: Regex = Regex::new(r"Play;(\w+)").unwrap();
+            static ref RE_PLAY: Regex = Regex::new(r"Play;(\d+)").unwrap();
         }
 
         if text == "Pause" {
@@ -51,7 +49,8 @@ impl std::convert::TryFrom<String> for PlayerMessage {
             Ok(PlayerMessage::Stop)
         } else if let Some(caps) = RE_PLAY.captures(&text) {
             if let Some(s) = caps.get(1) {
-                Ok(PlayerMessage::Play(s.as_str().to_string()))
+                // this unwrap should never fail, u64 compatibility is ensured by the regular expression
+                Ok(PlayerMessage::Play(s.as_str().parse::<u64>().unwrap()))
             } else {
                 Err("Cannot convert passed string to PlayerMessage.")
             }
@@ -63,17 +62,21 @@ impl std::convert::TryFrom<String> for PlayerMessage {
 
 
 fn index(_req: HttpRequest) -> actix_web::Result<NamedFile> {
-    // let path: PathBuf = req.match_info().query("~/Code/rust/fidelitas/index.html").parse().unwrap();
     let path: PathBuf = PathBuf::from("index.html");
     
     Ok(NamedFile::open(path)?)
 }
 
 fn controls(_req: HttpRequest) -> actix_web::Result<NamedFile> {
-    // let path: PathBuf = req.match_info().query("~/Code/rust/fidelitas/index.html").parse().unwrap();
     let path: PathBuf = PathBuf::from("controls.js");
     
     Ok(NamedFile::open(path)?)
+}
+
+fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::Payload) -> actix_web::Result<HttpResponse, actix_web::Error> {
+    let resp = ws::start(PlayerWs{ sender: state.sender.clone() }, &req, stream);
+    println!("{:?}", resp);
+    resp
 }
 
 struct PlayerWs {
@@ -87,8 +90,10 @@ impl Actor for PlayerWs {
 impl actix::Handler<WsOutgoingMsg> for PlayerWs {
     type Result = Result<(), BasicError>;
     fn handle(&mut self, msg: WsOutgoingMsg, ctx: &mut Self::Context) -> Self::Result {
-
-        ctx.text(msg.text);
+        match msg.kind {
+            WsOutGoingMsgKind::FsState(map) => ctx.text(serde_json::json!(map).to_string()),
+            _ => ctx.text(msg.info)
+        }
         Ok(())
     }
 }
@@ -149,7 +154,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
 
 #[derive(Clone, Debug)]
 struct WsOutgoingMsg {
-    text: String,
+    info: String,
     kind: WsOutGoingMsgKind,
 }
 
@@ -160,8 +165,8 @@ enum WsOutGoingMsgKind {
     Resume,
     Stop,
     FsChange,
+    FsState(HashMap<u64, String>)
 }
-
 
 impl actix::Message for WsOutgoingMsg {
     type Result = Result<(), BasicError>;
@@ -178,16 +183,40 @@ fn valid_directory(s: String) -> Result<(), String>{
     
 }
 
-fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::Payload) -> actix_web::Result<HttpResponse, actix_web::Error> {
-    let resp = ws::start(PlayerWs{ sender: state.sender.clone() }, &req, stream);
-    println!("{:?}", resp);
-    resp
+fn parse_media_dir(mut id: u64, path: &Path) -> Result<(u64, HashMap<u64, String>), std::io::Error>{
+    let mut registered_media: HashMap<u64, String> = HashMap::new();
+
+    lazy_static::lazy_static! {
+        static ref RE_AUDIO_EXTENSION: Regex = Regex::new(r".+\.mp3").unwrap();
+    }
+
+    
+    // expect will only fail when lacking permissions, existence and is_dir are guaranteed. TODO: properly handle this error.
+    for entry in std::fs::read_dir(path)? {
+        match entry {
+            Ok(good_entry) => {
+                if good_entry.path().is_dir() {
+                    let (new_id, subdir_media) = parse_media_dir(id, &good_entry.path())?;
+                    id = new_id;
+                    registered_media.extend(subdir_media);
+                } else {
+                    // TODO: handle properly instead of unwrap
+                    let path_str = good_entry.path().to_str().unwrap().to_string();
+                    if RE_AUDIO_EXTENSION.is_match(good_entry.file_name().to_str().unwrap()) {
+                        registered_media.insert(id, path_str);
+                        id += 1;
+                    } else {
+                        println!("Ignoring file with unsupported file type in media directory: {}.", path_str)
+                    }
+                }
+            },
+            Err(e) => {
+                println!("Failed to read a file in the media directory: {}",e )
+            }
+        }
+    }
+    Ok((id, registered_media))
 }
-
-
-
-
-
 
 fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msg: WsOutgoingMsg) {
     for conn in connections {
@@ -195,7 +224,7 @@ fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msg: WsOutgoingMsg) {
             msg.clone()
         ){
             Ok(_) => {},
-            Err(_) => {println!("Failed to send: ")}
+            Err(e) => {println!("Failed to send: {}", e)}
         }
     }
 }
@@ -227,7 +256,7 @@ fn main() {
         .get_matches();
 
 
-    let path = Path::new(matches.value_of("dir").unwrap());
+    let path = PathBuf::from(matches.value_of("dir").unwrap());
     println!("Hosting files in folder: {}", path.to_str().unwrap());
 
 
@@ -237,40 +266,55 @@ fn main() {
 
     
 
-
+    // sender will be passed to actix web as appstate
+    // receiver will be passed to the global player thread, 
     let (sender, receiver) = crossbeam_channel::unbounded();
 
     let _handle = thread::spawn(move || {
+        // player thread setup
+        // TODO: move outside closure
+
         let vlc_instance = vlc::Instance::new().unwrap();
         let mediaplayer = vlc::MediaPlayer::new(&vlc_instance).unwrap();
 
         let mut ws_connections: HashSet<Addr<PlayerWs>> = HashSet::new();
+        let (media_max_id, registered_media) = parse_media_dir(0, &path).expect("Unable to read media dir.");
 
+
+        // channel handling loop
         loop {
             match receiver.recv() {
                 Ok(msg) => {
                     match msg {
-                        PlayerMessage::Play(track_name) => {
-                            println!("Received track on worker thread: {}", track_name);
-                            let md = vlc::Media::new_path(&vlc_instance, track_name).unwrap();
-                            mediaplayer.set_media(&md);
-                            mediaplayer.play().unwrap();
-                            broadcast(&ws_connections, WsOutgoingMsg{text: String::from("Somebody else played a new track."), kind: WsOutGoingMsgKind::Play});
+                        PlayerMessage::Play(track_id) => {
+                            if let Some(track_path) = registered_media.get(&track_id) {
+                                println!("Received track on worker thread: {}-{}", track_id, track_path);
+                                let md = vlc::Media::new_path(&vlc_instance, track_path).unwrap();
+                                mediaplayer.set_media(&md);
+                                mediaplayer.play().unwrap();
+                                broadcast(&ws_connections, WsOutgoingMsg{info: String::from("Somebody else played a new track."), kind: WsOutGoingMsgKind::Play});
+                            } else {
+                                println!("Received track request with invalid track_id: {}", track_id)
+                            }                            
                         },
                         PlayerMessage::Pause => {
                             mediaplayer.pause();
-                            broadcast(&ws_connections, WsOutgoingMsg{text: String::from("Somebody else paused."), kind: WsOutGoingMsgKind::Pause});
+                            broadcast(&ws_connections, WsOutgoingMsg{info: String::from("Somebody else paused."), kind: WsOutGoingMsgKind::Pause});
                         }, 
                         PlayerMessage::Resume => {
                             mediaplayer.play().unwrap();
-                            broadcast(&ws_connections, WsOutgoingMsg{text: String::from("Somebody else resumed."), kind: WsOutGoingMsgKind::Resume});
+                            broadcast(&ws_connections, WsOutgoingMsg{info: String::from("Somebody else resumed."), kind: WsOutGoingMsgKind::Resume});
                         },
                         PlayerMessage::Stop => {
                             mediaplayer.stop();
-                            broadcast(&ws_connections, WsOutgoingMsg{text: String::from("Somebody else stopped."), kind: WsOutGoingMsgKind::Stop});
+                            broadcast(&ws_connections, WsOutgoingMsg{info: String::from("Somebody else stopped."), kind: WsOutGoingMsgKind::Stop});
                         },
                         PlayerMessage::Register(ws) => {
-                            ws_connections.insert(ws);
+                            ws_connections.insert(ws.clone());
+                            match ws.try_send(WsOutgoingMsg{info: String::from("Initial connection, sending fs information"), kind: WsOutGoingMsgKind::FsState(registered_media.clone())}){
+                                Ok(_) => {},
+                                Err(e) => {println!("Failed to send FsChange message: {}", e)}
+                            }
                         },
                         PlayerMessage::Unregister(ws) => {
                             ws_connections.remove(&ws);
@@ -296,10 +340,6 @@ fn main() {
             .service(
                 web::scope("api")
                     .route("ws", web::get().to(api_websocket))
-                    .route("play/{file}", web::get().to(httpapi::play))
-                    .route("pause", web::get().to(httpapi::pause))
-                    .route("resume", web::get().to(httpapi::resume))
-                    .route("stop", web::get().to(httpapi::stop))
             )
             .service(
                 web::scope("static")
