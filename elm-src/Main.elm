@@ -5,6 +5,8 @@ import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Http
 import Url.Builder exposing (absolute, crossOrigin)
+import Json.Encode
+import Json.Decode exposing (field, string, succeed, fail, Decoder)
 
 main =
   Browser.element
@@ -28,7 +30,8 @@ type alias Model =
   { counter: Int
   , player_state: PlayerState
   , responses: List String
-  , input: String
+  , last: IncomingWsMessageKind
+  , log: String
   }
 
 type PlayerState = Paused
@@ -39,7 +42,8 @@ init _ =
     { counter = 0
     , player_state = Paused
     , responses = []
-    , input = ""
+    , last = KindDefault
+    , log = ""
     }
     , Cmd.none
   )
@@ -64,8 +68,12 @@ update msg model =
     Stop ->
       (model, websocketOut "Stop")
     WebsocketIn value ->
-      (model, Cmd.none )
-
+      case Json.Decode.decodeString kindFieldDecoder value of
+        Ok kind ->
+          case kind of
+            KindFsState -> ({model | log = model.log ++ value ++ "\nkindfsstate detected\n"}, Cmd.none)
+            KindDefault -> ({model | log = model.log ++ value ++ "\nkinddefault detected\n"}, Cmd.none)
+        Err e -> ({model | log = model.log ++ value ++ "\nerror detected\n"}, Cmd.none)
 
 -- Subscriptions
 
@@ -85,4 +93,40 @@ view model =
     , button [ onClick Pause] [text "Pause"]
     , button [ onClick Resume] [text "Resume"]
     , button [ onClick Stop] [text "Stop"]
+    , div [] [ text "Log:"]
+    , div [] [ text model.log]
     ]
+
+
+-- TODO: Split into different file
+
+-- type alias IncomingWsMessage = {
+--   info: String
+--   , kind:  IncomingWsMessageKind
+-- }
+
+type IncomingWsMessageKind = KindFsState | KindDefault
+
+type IncomingWsMessage = FsState String | Default
+
+type alias MediaItem =
+  {
+    id: Int
+    , track: String
+  }
+
+
+
+
+
+kindFieldDecoder: Decoder IncomingWsMessageKind
+kindFieldDecoder = field "kind" kindDecoder
+
+kindDecoder: Decoder IncomingWsMessageKind
+kindDecoder = Json.Decode.string |> Json.Decode.andThen kindFromString
+
+kindFromString: String -> Decoder IncomingWsMessageKind
+kindFromString string =
+  case string of
+    "FsState" -> succeed KindFsState
+    _ -> fail <| "Cannot decode"

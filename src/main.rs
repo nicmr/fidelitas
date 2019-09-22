@@ -14,7 +14,7 @@ use crossbeam_channel;
 use regex::Regex;
 use lazy_static;
 
-// use serde::{Serialize};
+use serde::{Serialize};
 use serde_json;
 
 type BasicError = &'static str;
@@ -87,12 +87,18 @@ impl Actor for PlayerWs {
     type Context = ws::WebsocketContext<Self>;
 }
 
-impl actix::Handler<WsOutgoingMsg> for PlayerWs {
+impl actix::Handler<WsOutGoingMsgKind> for PlayerWs {
     type Result = Result<(), BasicError>;
-    fn handle(&mut self, msg: WsOutgoingMsg, ctx: &mut Self::Context) -> Self::Result {
-        match msg.kind {
-            WsOutGoingMsgKind::FsState(map) => ctx.text(serde_json::json!(map).to_string()),
-            _ => ctx.text(msg.info)
+    fn handle(&mut self, kind: WsOutGoingMsgKind, ctx: &mut Self::Context) -> Self::Result {
+        match kind {
+            WsOutGoingMsgKind::FsState(map) => {
+                let msg = WsOutgoingMsg {
+                    kind: String::from("FsState"),
+                    payload: serde_json::json!(map).to_string(),
+                };
+                ctx.text(serde_json::json!(msg).to_string());
+            }
+            _ => ctx.text("Not yet supported")
         }
         Ok(())
     }
@@ -152,10 +158,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct WsOutgoingMsg {
-    info: String,
-    kind: WsOutGoingMsgKind,
+    kind: String,
+    payload: String,
 }
 
 #[derive(Clone, Debug)]
@@ -168,7 +174,7 @@ enum WsOutGoingMsgKind {
     FsState(HashMap<u64, String>)
 }
 
-impl actix::Message for WsOutgoingMsg {
+impl actix::Message for WsOutGoingMsgKind {
     type Result = Result<(), BasicError>;
 }
 
@@ -218,10 +224,10 @@ fn parse_media_dir(mut id: u64, path: &Path) -> Result<(u64, HashMap<u64, String
     Ok((id, registered_media))
 }
 
-fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msg: WsOutgoingMsg) {
+fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: WsOutGoingMsgKind) {
     for conn in connections {
         match conn.try_send(
-            msg.clone()
+            msgkind.clone()
         ){
             Ok(_) => {},
             Err(e) => {println!("Failed to send: {}", e)}
@@ -292,26 +298,26 @@ fn main() {
                                 let md = vlc::Media::new_path(&vlc_instance, track_path).unwrap();
                                 mediaplayer.set_media(&md);
                                 mediaplayer.play().unwrap();
-                                broadcast(&ws_connections, WsOutgoingMsg{info: String::from("Somebody else played a new track."), kind: WsOutGoingMsgKind::Play});
+                                broadcast(&ws_connections, WsOutGoingMsgKind::Play);
                             } else {
                                 println!("Received track request with invalid track_id: {}", track_id)
                             }                            
                         },
                         PlayerMessage::Pause => {
                             mediaplayer.pause();
-                            broadcast(&ws_connections, WsOutgoingMsg{info: String::from("Somebody else paused."), kind: WsOutGoingMsgKind::Pause});
+                            broadcast(&ws_connections, WsOutGoingMsgKind::Pause);
                         }, 
                         PlayerMessage::Resume => {
                             mediaplayer.play().unwrap();
-                            broadcast(&ws_connections, WsOutgoingMsg{info: String::from("Somebody else resumed."), kind: WsOutGoingMsgKind::Resume});
+                            broadcast(&ws_connections, WsOutGoingMsgKind::Resume);
                         },
                         PlayerMessage::Stop => {
                             mediaplayer.stop();
-                            broadcast(&ws_connections, WsOutgoingMsg{info: String::from("Somebody else stopped."), kind: WsOutGoingMsgKind::Stop});
+                            broadcast(&ws_connections, WsOutGoingMsgKind::Stop);
                         },
                         PlayerMessage::Register(ws) => {
                             ws_connections.insert(ws.clone());
-                            match ws.try_send(WsOutgoingMsg{info: String::from("Initial connection, sending fs information"), kind: WsOutGoingMsgKind::FsState(registered_media.clone())}){
+                            match ws.try_send(WsOutGoingMsgKind::FsState(registered_media.clone())){
                                 Ok(_) => {},
                                 Err(e) => {println!("Failed to send FsChange message: {}", e)}
                             }
