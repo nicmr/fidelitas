@@ -171,7 +171,8 @@ enum WsOutGoingMsgKind {
     Resume,
     Stop,
     FsChange,
-    FsState(HashMap<u64, String>)
+    FsState(HashMap<u64, String>),
+    RegisterSuccess,
 }
 
 impl actix::Message for WsOutGoingMsgKind {
