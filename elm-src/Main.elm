@@ -5,8 +5,11 @@ import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Http
 import Url.Builder exposing (absolute, crossOrigin)
-import Json.Encode
-import Json.Decode exposing (field, string, succeed, fail, Decoder)
+-- import Json.Encode
+import Json.Decode
+
+
+import Messages.In
 
 main =
   Browser.element
@@ -30,7 +33,7 @@ type alias Model =
   { counter: Int
   , player_state: PlayerState
   , responses: List String
-  , last: IncomingWsMessageKind
+  , last: Messages.In.IncomingMsgKind
   , log: String
   }
 
@@ -42,7 +45,7 @@ init _ =
     { counter = 0
     , player_state = Paused
     , responses = []
-    , last = KindDefault
+    , last = Messages.In.Default
     , log = ""
     }
     , Cmd.none
@@ -68,12 +71,14 @@ update msg model =
     Stop ->
       (model, websocketOut "Stop")
     WebsocketIn value ->
-      case Json.Decode.decodeString kindFieldDecoder value of
+      case Json.Decode.decodeString Messages.In.kindFieldDecoder value of
         Ok kind ->
           case kind of
-            KindFsState -> ({model | log = model.log ++ value ++ "\nkindfsstate detected\n"}, Cmd.none)
-            KindDefault -> ({model | log = model.log ++ value ++ "\nkinddefault detected\n"}, Cmd.none)
-        Err e -> ({model | log = model.log ++ value ++ "\nerror detected\n"}, Cmd.none)
+            Messages.In.FsState -> ({model | log = model.log ++ value ++ "\nfsstate\n"}, Cmd.none)
+            Messages.In.RegisterSuccess -> ({model | log = model.log ++ value ++ "\registersuccess\n"}, Cmd.none)
+            _ -> (model, Cmd.none)
+        Err e -> ({model | log = model.log ++ value ++ "\nerror\n"}, Cmd.none)
+
 
 -- Subscriptions
 
@@ -97,36 +102,4 @@ view model =
     , div [] [ text model.log]
     ]
 
-
--- TODO: Split into different file
-
--- type alias IncomingWsMessage = {
---   info: String
---   , kind:  IncomingWsMessageKind
--- }
-
-type IncomingWsMessageKind = KindFsState | KindDefault
-
 type IncomingWsMessage = FsState String | Default
-
-type alias MediaItem =
-  {
-    id: Int
-    , track: String
-  }
-
-
-
-
-
-kindFieldDecoder: Decoder IncomingWsMessageKind
-kindFieldDecoder = field "kind" kindDecoder
-
-kindDecoder: Decoder IncomingWsMessageKind
-kindDecoder = Json.Decode.string |> Json.Decode.andThen kindFromString
-
-kindFromString: String -> Decoder IncomingWsMessageKind
-kindFromString string =
-  case string of
-    "FsState" -> succeed KindFsState
-    _ -> fail <| "Cannot decode"
