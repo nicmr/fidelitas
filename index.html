@@ -13,7 +13,9 @@
     ws.onmessage = function(message)
     {
         console.log(message);
-        app.ports.websocketIn.send(JSON.stringify({data:message.data,timeStamp:message.timeStamp}));
+        // app.ports.websocketIn.send(JSON.stringify({data:message.data,timeStamp:message.timeStamp}));
+        // app.ports.websocketIn.send(JSON.parse(message.data))
+        app.ports.websocketIn.send(message.data)
     };
     app.ports.websocketOut.subscribe(function(msg) { ws.send(msg); });
   </script>
