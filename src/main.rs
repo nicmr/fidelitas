@@ -87,19 +87,54 @@ impl Actor for PlayerWs {
     type Context = ws::WebsocketContext<Self>;
 }
 
-impl actix::Handler<WsOutGoingMsgKind> for PlayerWs {
+impl actix::Handler<WsOutgoingMsgKind> for PlayerWs {
     type Result = Result<(), BasicError>;
-    fn handle(&mut self, kind: WsOutGoingMsgKind, ctx: &mut Self::Context) -> Self::Result {
-        match kind {
-            WsOutGoingMsgKind::FsState(map) => {
-                let msg = WsOutgoingMsg {
+    fn handle(&mut self, kind: WsOutgoingMsgKind, ctx: &mut Self::Context) -> Self::Result {
+        let msg = match kind {
+            WsOutgoingMsgKind::FsState(map) => {
+                WsOutgoingMsg {
                     kind: String::from("FsState"),
                     payload: serde_json::json!(map).to_string(),
-                };
-                ctx.text(serde_json::json!(msg).to_string());
+                }
+            },
+            WsOutgoingMsgKind::FsChange => {
+                WsOutgoingMsg {
+                    kind: String::from("FsChange"),
+                    payload: String::new(),
+                }
             }
-            _ => ctx.text("Not yet supported")
-        }
+            WsOutgoingMsgKind::RegisterSuccess => {
+                WsOutgoingMsg {
+                    kind: String::from("RegisterSuccess"),
+                    payload: String::new(),
+                }
+            },
+            WsOutgoingMsgKind::Play => {
+                WsOutgoingMsg {
+                    kind: String::from("Play"),
+                    payload: String::new(),
+                }
+            },
+            WsOutgoingMsgKind::Pause => {
+                WsOutgoingMsg {
+                    kind: String::from("Pause"),
+                    payload: String::new(),
+                }
+            },
+            WsOutgoingMsgKind::Stop => {
+                WsOutgoingMsg {
+                    kind: String::from("Stop"),
+                    payload: String::new(),
+                }
+            },
+            WsOutgoingMsgKind::Resume => {
+                WsOutgoingMsg {
+                    kind: String::from("Pause"),
+                    payload: String::new(),
+                }
+            },
+        };
+        ctx.text(serde_json::json!(msg).to_string());
         Ok(())
     }
 }
@@ -112,11 +147,9 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
         let addr = ctx.address();
         match self.sender.send(PlayerMessage::Register(addr)) {
             Ok(()) => {
-                ctx.text("Ws registered");
                 println!("Ws registered");
             },
             Err(e) => {
-                ctx.text("Ws registration failed");
                 println!("Ws registration failed: {}", e);
             },
         }
@@ -165,7 +198,7 @@ struct WsOutgoingMsg {
 }
 
 #[derive(Clone, Debug)]
-enum WsOutGoingMsgKind {
+enum WsOutgoingMsgKind {
     Play,
     Pause,
     Resume,
@@ -175,7 +208,7 @@ enum WsOutGoingMsgKind {
     RegisterSuccess,
 }
 
-impl actix::Message for WsOutGoingMsgKind {
+impl actix::Message for WsOutgoingMsgKind {
     type Result = Result<(), BasicError>;
 }
 
@@ -196,7 +229,6 @@ fn parse_media_dir(mut id: u64, path: &Path) -> Result<(u64, HashMap<u64, String
     lazy_static::lazy_static! {
         static ref RE_AUDIO_EXTENSION: Regex = Regex::new(r".+\.mp3").unwrap();
     }
-
     
     // expect will only fail when lacking permissions, existence and is_dir are guaranteed. TODO: properly handle this error.
     for entry in std::fs::read_dir(path)? {
@@ -225,7 +257,7 @@ fn parse_media_dir(mut id: u64, path: &Path) -> Result<(u64, HashMap<u64, String
     Ok((id, registered_media))
 }
 
-fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: WsOutGoingMsgKind) {
+fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: WsOutgoingMsgKind) {
     for conn in connections {
         match conn.try_send(
             msgkind.clone()
@@ -299,26 +331,26 @@ fn main() {
                                 let md = vlc::Media::new_path(&vlc_instance, track_path).unwrap();
                                 mediaplayer.set_media(&md);
                                 mediaplayer.play().unwrap();
-                                broadcast(&ws_connections, WsOutGoingMsgKind::Play);
+                                broadcast(&ws_connections, WsOutgoingMsgKind::Play);
                             } else {
                                 println!("Received track request with invalid track_id: {}", track_id)
                             }                            
                         },
                         PlayerMessage::Pause => {
                             mediaplayer.pause();
-                            broadcast(&ws_connections, WsOutGoingMsgKind::Pause);
+                            broadcast(&ws_connections, WsOutgoingMsgKind::Pause);
                         }, 
                         PlayerMessage::Resume => {
                             mediaplayer.play().unwrap();
-                            broadcast(&ws_connections, WsOutGoingMsgKind::Resume);
+                            broadcast(&ws_connections, WsOutgoingMsgKind::Resume);
                         },
                         PlayerMessage::Stop => {
                             mediaplayer.stop();
-                            broadcast(&ws_connections, WsOutGoingMsgKind::Stop);
+                            broadcast(&ws_connections, WsOutgoingMsgKind::Stop);
                         },
                         PlayerMessage::Register(ws) => {
                             ws_connections.insert(ws.clone());
-                            match ws.try_send(WsOutGoingMsgKind::FsState(registered_media.clone())){
+                            match ws.try_send(WsOutgoingMsgKind::FsState(registered_media.clone())){
                                 Ok(_) => {},
                                 Err(e) => {println!("Failed to send FsChange message: {}", e)}
                             }
@@ -352,7 +384,6 @@ fn main() {
                 web::scope("static")
                     .route("controls.js", web::get().to(controls))
             )
-
     })
     .bind(format!("0.0.0.0:{}", port))
     .unwrap()
