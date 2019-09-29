@@ -76,15 +76,17 @@ update msg model =
       case Json.Decode.decodeString Messages.In.kindDecoder value of
         Ok kind ->
           case kind of
-            Messages.In.FsState -> ({model | log = model.log ++ value ++ "\nfsstate\n"}, Cmd.none)
-            Messages.In.RegisterSuccess -> ({model | log = model.log ++ value ++ "\registersuccess\n"}, Cmd.none)
+            Messages.In.FsState -> case  Json.Decode.decodeString (Messages.In.payload kind) value of
+              Ok payload ->  ({model | log = model.log ++ value ++ "\npayloadDecoded\n"}, Cmd.none)
+              Err e ->  ({model | log = model.log ++ value ++ " error: payloadDecodeError"}, Cmd.none)
+            Messages.In.RegisterSuccess -> ({model | log = model.log ++ value ++ "\registerSuccess\n"}, Cmd.none)
             Messages.In.Play -> ({model | player_state = Playing}, Cmd.none)
             Messages.In.Resume -> ({model | player_state = Playing}, Cmd.none)
             Messages.In.Pause -> ({model | player_state = Paused}, Cmd.none)
             Messages.In.Stop -> ({model | player_state = Stopped}, Cmd.none)
 
             _ -> (model, Cmd.none)
-        Err e -> ({model | log = model.log ++ value ++ "\nerror\n"}, Cmd.none)
+        Err e -> ({model | log = model.log ++ value ++ " error: msgKindError"}, Cmd.none)
 
 
 -- Subscriptions
