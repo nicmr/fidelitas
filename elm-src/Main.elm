@@ -7,6 +7,7 @@ import Http
 import Url.Builder exposing (absolute, crossOrigin)
 -- import Json.Encode
 import Json.Decode
+import Dict exposing (Dict)
 
 
 import Messages.In
@@ -36,6 +37,7 @@ type alias Model =
   { counter: Int
   , player_state: PlayerState
   , log: String
+  , tracks: Dict String String
   }
 
 
@@ -45,6 +47,7 @@ init _ =
     { counter = 0
     , player_state = Stopped
     , log = ""
+    , tracks = Dict.empty
     }
     , Cmd.none
   )
@@ -76,10 +79,14 @@ update msg model =
       case Json.Decode.decodeString Messages.In.kindDecoder value of
         Ok kind ->
           case kind of
-            Messages.In.FsState -> case  Json.Decode.decodeString (Messages.In.payload kind) value of
-              Ok payload ->  ({model | log = model.log ++ value ++ "\npayloadDecoded\n"}, Cmd.none)
+            Messages.In.FsState -> case  Json.Decode.decodeString (Messages.In.payloadDecoder kind) value of
+              Ok payload ->
+                case payload of
+                  Messages.In.FsStatePayload new_tracks->
+                    ({model | log = model.log ++ value ++ " payloadDecoded", tracks = new_tracks}, Cmd.none)
+                  _ -> ({model | log = model.log ++ value ++ " this shouldn't happen"}, Cmd.none)
               Err e ->  ({model | log = model.log ++ value ++ " error: payloadDecodeError"}, Cmd.none)
-            Messages.In.RegisterSuccess -> ({model | log = model.log ++ value ++ "\registerSuccess\n"}, Cmd.none)
+            Messages.In.RegisterSuccess -> ({model | log = model.log ++ value ++ " registerSuccess"}, Cmd.none)
             Messages.In.Play -> ({model | player_state = Playing}, Cmd.none)
             Messages.In.Resume -> ({model | player_state = Playing}, Cmd.none)
             Messages.In.Pause -> ({model | player_state = Paused}, Cmd.none)
@@ -108,6 +115,17 @@ view model =
     , button [ onClick Pause] [text "Pause"]
     , button [ onClick Resume] [text "Resume"]
     , button [ onClick Stop] [text "Stop"]
+    , toHtmlList model.tracks
     , div [] [ text "Log:"]
     , div [] [ text model.log]
     ]
+
+-- View Helpers
+
+toHtmlList : Dict String String -> Html Msg
+toHtmlList dict = 
+  Html.ul [] (Dict.toList dict |> List.map toLi)
+
+toLi : (String, String) -> Html Msg
+toLi (id, name) =
+  Html.li [] [text ("ID: " ++ id ++ " Name: " ++ name)]

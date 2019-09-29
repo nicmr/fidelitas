@@ -1,10 +1,10 @@
-module Messages.In exposing (IncomingMsgKind(..), kindDecoder, payload)
+module Messages.In exposing (MsgKind(..), MsgPayload(..), kindDecoder, payloadDecoder)
 
 import Json.Decode exposing (field, succeed, fail)
 import Dict exposing (Dict)
 
 
-type IncomingMsgKind = Default
+type MsgKind = Default
     | RegisterSuccess
     | Play
     | Pause
@@ -13,7 +13,7 @@ type IncomingMsgKind = Default
     | FsChange
     | FsState
 
-type IncomingMsgPayload = FsStatePayload (Dict String String) | NoPayload
+type MsgPayload = FsStatePayload (Dict String String) | NoPayload
 
 type alias MediaItem =
   {
@@ -22,8 +22,8 @@ type alias MediaItem =
   }
 
 
-payload : IncomingMsgKind -> Json.Decode.Decoder IncomingMsgPayload
-payload kind =
+payloadDecoder : MsgKind -> Json.Decode.Decoder MsgPayload
+payloadDecoder kind =
   case kind of
     FsState -> Json.Decode.map FsStatePayload (field "media" (Json.Decode.dict Json.Decode.string))
     _ -> fail <| "No payload can be decoded for this msg kind"
@@ -36,16 +36,16 @@ decodeMediaItem =
         (field "name" Json.Decode.string)
 
 -- MsgKind decoding
-kindDecoder : Json.Decode.Decoder IncomingMsgKind
+kindDecoder : Json.Decode.Decoder MsgKind
 kindDecoder = field "type" (Json.Decode.string |> Json.Decode.andThen kindDecoderFromString)
 
-kindDecoderFromString : String -> Json.Decode.Decoder IncomingMsgKind
+kindDecoderFromString : String -> Json.Decode.Decoder MsgKind
 kindDecoderFromString string =
   case kindFromString string of
     Just kind -> succeed kind
     Nothing -> fail <| "Can't decode msg kind"
 
-kindFromString : String -> Maybe IncomingMsgKind
+kindFromString : String -> Maybe MsgKind
 kindFromString string =
   case string of
     "RegisterSuccess" -> Just RegisterSuccess
