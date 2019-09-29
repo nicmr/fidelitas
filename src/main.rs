@@ -89,51 +89,7 @@ impl Actor for PlayerWs {
 
 impl actix::Handler<WsOutgoingMsgKind> for PlayerWs {
     type Result = Result<(), BasicError>;
-    fn handle(&mut self, kind: WsOutgoingMsgKind, ctx: &mut Self::Context) -> Self::Result {
-        let msg = match kind {
-            WsOutgoingMsgKind::FsState(map) => {
-                WsOutgoingMsg {
-                    kind: String::from("FsState"),
-                    payload: serde_json::json!(map).to_string(),
-                }
-            },
-            WsOutgoingMsgKind::FsChange => {
-                WsOutgoingMsg {
-                    kind: String::from("FsChange"),
-                    payload: String::new(),
-                }
-            }
-            WsOutgoingMsgKind::RegisterSuccess => {
-                WsOutgoingMsg {
-                    kind: String::from("RegisterSuccess"),
-                    payload: String::new(),
-                }
-            },
-            WsOutgoingMsgKind::Play => {
-                WsOutgoingMsg {
-                    kind: String::from("Play"),
-                    payload: String::new(),
-                }
-            },
-            WsOutgoingMsgKind::Pause => {
-                WsOutgoingMsg {
-                    kind: String::from("Pause"),
-                    payload: String::new(),
-                }
-            },
-            WsOutgoingMsgKind::Stop => {
-                WsOutgoingMsg {
-                    kind: String::from("Stop"),
-                    payload: String::new(),
-                }
-            },
-            WsOutgoingMsgKind::Resume => {
-                WsOutgoingMsg {
-                    kind: String::from("Pause"),
-                    payload: String::new(),
-                }
-            },
-        };
+    fn handle(&mut self, msg: WsOutgoingMsgKind, ctx: &mut Self::Context) -> Self::Result {
         ctx.text(serde_json::json!(msg).to_string());
         Ok(())
     }
@@ -192,19 +148,14 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
 }
 
 #[derive(Clone, Debug, Serialize)]
-struct WsOutgoingMsg {
-    kind: String,
-    payload: String,
-}
-
-#[derive(Clone, Debug)]
+#[serde(tag="type")]
 enum WsOutgoingMsgKind {
     Play,
     Pause,
     Resume,
     Stop,
     FsChange,
-    FsState(HashMap<u64, String>),
+    FsState{media: HashMap<u64, String>},
     RegisterSuccess,
 }
 
@@ -350,7 +301,7 @@ fn main() {
                         },
                         PlayerMessage::Register(ws) => {
                             ws_connections.insert(ws.clone());
-                            match ws.try_send(WsOutgoingMsgKind::FsState(registered_media.clone())){
+                            match ws.try_send(WsOutgoingMsgKind::FsState{media: registered_media.clone()}){
                                 Ok(_) => {},
                                 Err(e) => {println!("Failed to send FsChange message: {}", e)}
                             }
