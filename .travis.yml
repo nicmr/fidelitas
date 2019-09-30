@@ -30,9 +30,9 @@ install:
   - rustup target add $TARGET
 
   # x86_64 apt dependencies
-  - if [ $TARGET == "x86_64-unknown-linux-gnu" ]; then apt-get install libvlc-dev; fi
+  - if [ $TARGET == "x86_64-unknown-linux-gnu" ]; then sudo apt-get install libvlc-dev; fi
   # cross-compilation apt dependencies  
-  - if [ $TARGET == "armv7-unknown-linux-gnueabihf" ]; then ./ci-scripts/armv7_cross_deps.sh; fi
+  - if [ $TARGET == "armv7-unknown-linux-gnueabihf" ]; then source ./ci-scripts/armv7_cross_deps.sh; fi
 
 
   # moved to script file
@@ -57,7 +57,7 @@ script:
   - cargo test --verbose --all
   - elm make elm-src/Main.elm
   - cargo build --verbose --all --target=$TARGET
-  
+
 before_deploy:
   # TODO: adapt to work for all targets
 
