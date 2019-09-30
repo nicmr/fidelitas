@@ -30,9 +30,9 @@ install:
   - rustup target add $TARGET
 
   # x86_64 apt dependencies
-  - if [ $TARGET == "x86_64-unknown-linux-gnu"]; then apt-get install libvlc-dev; fi
+  - if [ $TARGET == "x86_64-unknown-linux-gnu" ]; then apt-get install libvlc-dev; fi
   # cross-compilation apt dependencies  
-  - if [ $TARGET == "armv7-unknown-linux-gnueabihf"]; then ./ci-scripts/armv7_cross_deps.sh; fi
+  - if [ $TARGET == "armv7-unknown-linux-gnueabihf" ]; then ./ci-scripts/armv7_cross_deps.sh; fi
 
 
   # moved to script file
@@ -46,7 +46,7 @@ install:
   # - sudo apt-get install libc6-dev-armhf-cross
  
   # check if the cross-compile gcc has been correctly installed
-  - if [ $TARGET == "armv7-unknown-linux-gnueabihf"]; then arm-linux-gnueabihf-gcc --version; fi
+  - if [ $TARGET == "armv7-unknown-linux-gnueabihf" ]; then arm-linux-gnueabihf-gcc --version; fi
 
   # application-specific apt dependencies
   - sudo apt-get install libvlc-dev
@@ -56,28 +56,31 @@ script:
   - cargo build --release --verbose --all
   - cargo test --verbose --all
   - elm make elm-src/Main.elm
-  - cargo build --verbose --all --target=armv7-unknown-linux-gnueabihf
-  - cargo build --release --verbose --all --target=armv7-unknown-linux-gnueabihf
+  - cargo build --verbose --all --target=$TARGET
+  
 before_deploy:
+  # TODO: adapt to work for all targets
+
+
   # package files for x64 release
-  - mkdir linux_x64
-  - cp target/debug/fidelitas linux_x64/
-  - cp index.html linux_x64/
-  - tar -zcvf fidelitas_linux_x64.tar.gz linux_x64
+  - mkdir "release_${TARGET}"
+  - cp target/debug/fidelitas "release_${TARGET}/"
+  - cp index.html release_${TARGET}/
+  - tar -zcvf fidelitas_${TARGET}.tar.gz "release_${TARGET}"
 
-  # package files for armv7 release
-  - mkdir linux_armv7
-  - cp target/armv7-unknown-linux-gnueabihf/debug/fidelitas linux_armv7
-  - cp index.html linux_x64
-  - tar -zcvf fidelitas_linux_armv7.tar.gz linux_armv7
+  # # package files for armv7 release
+  # - mkdir linux_armv7
+  # - cp target/armv7-unknown-linux-gnueabihf/debug/fidelitas linux_armv7
+  # - cp index.html linux_x64
+  # - tar -zcvf fidelitas_linux_armv7.tar.gz linux_armv7
 
-deploy:
-  provider: releases
-  skip_cleanup: true
-  api_key: $GITHUB_ACCESS_TOKEN 
-  file:
-  - "fidelitas_linux_x64.tar.gz"
-  - "fidelitas_linux_armv7.tar.gz"
-  title: $GITHUB_RELEASE_TITLE
-  on:
-    branch: master
+# deploy:
+#   provider: releases
+#   skip_cleanup: true
+#   api_key: $GITHUB_ACCESS_TOKEN 
+#   file:
+#   - "fidelitas_linux_x64.tar.gz"
+#   - "fidelitas_linux_armv7.tar.gz"
+#   title: $GITHUB_RELEASE_TITLE
+#   on:
+#     branch: master
