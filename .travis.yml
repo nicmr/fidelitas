@@ -29,7 +29,7 @@ env:
 
 install:
   # elm support
-  - npm install -g elm
+  - sudo npm install -g elm
   
   # x86_64 apt dependencies
   - if [ $TARGET == "x86_64-unknown-linux-gnu" ]; then sudo apt-get install libvlc-dev; fi
