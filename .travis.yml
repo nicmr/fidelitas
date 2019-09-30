@@ -2,6 +2,9 @@ language: rust
 rust:
   - stable
 
+services:
+  - docker
+
 # addons:
 #   apt:
 #     sources: -
@@ -18,55 +21,44 @@ env:
     - TARGET="x86_64-unknown-linux-gnu"
     - TARGET="armv7-unknown-linux-gnueabihf"
 
-matrix:
-  allow_failures:
-  - TARGET="armv7-unknown-linux-gnueabihf"
+# matrix:
+#   allow_failures:
+#   - TARGET="armv7-unknown-linux-gnueabihf"
 
 install:
   # elm support
   - npm install -g elm
   
-  # rust target for cross-compilation
-  - rustup target add $TARGET
-
   # x86_64 apt dependencies
   - if [ $TARGET == "x86_64-unknown-linux-gnu" ]; then sudo apt-get install libvlc-dev; fi
-  # cross-compilation apt dependencies  
-  - if [ $TARGET == "armv7-unknown-linux-gnueabihf" ]; then source ./ci-scripts/armv7_cross_deps.sh; fi
-
-
-  # moved to script file
-  # # rust target for cross-compilation
-  # - rustup target add armv7-unknown-linux-gnueabihf
-  
-  # # apt dependencies for cross-compilation
-  # - sudo apt-get update
-  # - sudo apt-get install build-essential
-  # - sudo apt-get install gcc-arm-linux-gnueabihf
-  # - sudo apt-get install libc6-dev-armhf-cross
- 
-  # check if the cross-compile gcc has been correctly installed
-  - if [ $TARGET == "armv7-unknown-linux-gnueabihf" ]; then arm-linux-gnueabihf-gcc --version; fi
-
-  # application-specific apt dependencies
-  - sudo apt-get install libvlc-dev
-
 
 script:
   - cargo build --release --verbose --all
   - cargo test --verbose --all
   - elm make elm-src/Main.elm
-  - cargo build --verbose --all --target=$TARGET
+  - |
+    if [ $TARGET == "x86_64-unknown-linux-gnu" ];
+    then
+      cargo build --verbose --all --target=$TARGET;
+    fi
+  - |
+    if [ $TARGET == "armv7-unknown-linux-gnueabihf" ];
+    then
+      mkdir cross-artifacts;
+      docker build -f dockerfiles/fidelitas-cross-armv7.Dockerfile -t fidelitas-cross-armv7 .;
+      docker run -v $PWD/cross-artifacts:/artifacts:rw fidelitas-cross-armv7;
+    fi
 
-before_deploy:
-  # TODO: adapt to work for all targets
+
+# TODO: fix deploy
+# before_deploy:
 
 
   # package files for x64 release
-  - mkdir "release_${TARGET}"
-  - cp target/debug/fidelitas "release_${TARGET}/"
-  - cp index.html release_${TARGET}/
-  - tar -zcvf fidelitas_${TARGET}.tar.gz "release_${TARGET}"
+  # - mkdir "release_${TARGET}"
+  # - cp target/debug/fidelitas "release_${TARGET}/"
+  # - cp index.html release_${TARGET}/
+  # - tar -zcvf fidelitas_${TARGET}.tar.gz "release_${TARGET}"
 
   # # package files for armv7 release
   # - mkdir linux_armv7
