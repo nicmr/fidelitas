@@ -6,9 +6,10 @@ rust:
 services:
   - docker
 
-# addons:
-#   apt:
-#     sources: -
+addons:
+  apt:
+    packages:
+    - npm
 
 cache:
   - cargo
