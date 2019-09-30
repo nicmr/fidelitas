@@ -34,7 +34,7 @@ type Msg = Increment | Decrement | Play  | Pause | Resume | Stop | WebsocketIn S
 -- Model 
 
 type alias Model =
-  { counter: Int
+  { volume: Int
   , player_state: PlayerState
   , log: String
   , tracks: Dict String String
@@ -44,7 +44,7 @@ type alias Model =
 init : () -> (Model, Cmd Msg)
 init _ =
   (
-    { counter = 0
+    { volume = 0
     , player_state = Stopped
     , log = ""
     , tracks = Dict.empty
@@ -63,12 +63,12 @@ update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
     Increment ->
-      ( { model | counter = model.counter + 1}, Cmd.none )
+      ( { model | volume = model.volume + 1}, Cmd.none )
     Decrement ->
-      ( { model | counter = model.counter - 1}, Cmd.none )
+      ( { model | volume = model.volume - 1}, Cmd.none )
     Play ->
       -- ( model, Http.get { url = absolute ["api", "play", "something"] [], expect = Http.expectString DataReceived})
-      (model, websocketOut "Play;something")
+      (model, websocketOut "Play;0")
     Pause ->
       (model, websocketOut "Pause")
     Resume ->
@@ -109,7 +109,7 @@ view : Model -> Html Msg
 view model =
   div []
     [ button [ onClick Decrement ] [ text "-" ]
-    , div [] [ text (String.fromInt model.counter) ]
+    , div [] [ text (String.fromInt model.volume) ]
     , button [ onClick Increment ] [ text "+" ]
     , button [ onClick Play] [text "Play"]
     , button [ onClick Pause] [text "Pause"]
