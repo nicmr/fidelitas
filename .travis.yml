@@ -1,6 +1,15 @@
+dist: bionic
 language: rust
 rust:
   - stable
+
+services:
+  - docker
+
+addons:
+  apt:
+    packages:
+    - npm
 
 cache:
   - cargo
@@ -8,54 +17,63 @@ cache:
 
 env:
   global:
-    - GITHUB_RELEASE_TITLE=Travis_build_#${TRAVIS_BUILD_NUMBER} 
+    - GITHUB_RELEASE_TITLE="Travis_build_${TRAVIS_BUILD_NUMBER}"
     - SKIP_ELM=TRUE
+  matrix:
+    - TARGET="x86_64-unknown-linux-gnu"
+    - TARGET="armv7-unknown-linux-gnueabihf"
+
+# matrix:
+#   allow_failures:
+#   - TARGET="armv7-unknown-linux-gnueabihf"
 
 install:
-  # for elm support
-  - npm install -g elm
-
-  # for cross-compilation
-  - rustup target add armv7-unknown-linux-gnueabihf
+  # elm support
+  - sudo npm install -g elm
   
-  # apt dependencies for cross-compilation
-  - sudo apt-get update
-  - sudo apt-get install build-essential
-  - sudo apt-get install gcc-arm-linux-gnueabihf # required for linking
- 
-  - arm-linux-gnueabihf-gcc --version # check if the gcc has been correctly installed
-
+  # x86_64 apt dependencies
+  - if [ $TARGET == "x86_64-unknown-linux-gnu" ]; then sudo apt-get install libvlc-dev; fi
 
 script:
-  - cargo build --release --verbose --all
-  - cargo test --verbose --all
   - elm make elm-src/Main.elm
+  - |
+    if [ $TARGET == "x86_64-unknown-linux-gnu" ];
+    then
+      cargo build --verbose --all --target=$TARGET;
+      cargo test --verbose --all;
+    fi
+  - |
+    if [ $TARGET == "armv7-unknown-linux-gnueabihf" ];
+    then
+      mkdir cross-artifacts;
+      docker build -f dockerfiles/fidelitas-cross-armv7.Dockerfile -t fidelitas-cross-armv7 .;
+      docker run -v $PWD/cross-artifacts:/artifacts:rw fidelitas-cross-armv7;
+    fi
 
 
+# TODO: fix deploy
+# before_deploy:
 
-  # - cargo build --release --verbose --all --target=armv7-unknown-linux-gnueabihf # cross-compilation still broken
 
-before_deploy:
   # package files for x64 release
-  - mkdir linux_x64
-  - cp target/debug/fidelitas linux_x64/
-  - cp index.html linux_x64/
-  - tar -zcvf fidelitas_linux_x64.tar.gz linux_x64
+  # - mkdir "release_${TARGET}"
+  # - cp target/debug/fidelitas "release_${TARGET}/"
+  # - cp index.html release_${TARGET}/
+  # - tar -zcvf fidelitas_${TARGET}.tar.gz "release_${TARGET}"
 
-  # cross-compilation still broken
-  # package files for armv7 release
+  # # package files for armv7 release
   # - mkdir linux_armv7
   # - cp target/armv7-unknown-linux-gnueabihf/debug/fidelitas linux_armv7
   # - cp index.html linux_x64
   # - tar -zcvf fidelitas_linux_armv7.tar.gz linux_armv7
 
-deploy:
-  provider: releases
-  skip_cleanup: true
-  api_key: $GITHUB_ACCESS_TOKEN 
-  file:
-  - "fidelitas_linux_x64.tar.gz"
-  # - "fidelitas_linux_armv7.tar.gz" # cross compilation still broken
-  title: $GITHUB_RELEASE_TITLE
-  on:
-    branch: master
+# deploy:
+#   provider: releases
+#   skip_cleanup: true
+#   api_key: $GITHUB_ACCESS_TOKEN 
+#   file:
+#   - "fidelitas_linux_x64.tar.gz"
+#   - "fidelitas_linux_armv7.tar.gz"
+#   title: $GITHUB_RELEASE_TITLE
+#   on:
+#     branch: master

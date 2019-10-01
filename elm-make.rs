@@ -22,6 +22,7 @@ fn compile_elm() -> () {
         Command::new("elm")
             .arg("make")
             .arg("elm-src/Main.elm")
+            .arg("--output=controls.js")
             .output()
             .expect("failed to compile elm files")
     };
