@@ -157,6 +157,7 @@ enum WsOutgoingMsgKind {
     FsChange,
     FsState{media: HashMap<u64, String>},
     RegisterSuccess,
+    Error,
 }
 
 impl actix::Message for WsOutgoingMsgKind {
@@ -290,10 +291,17 @@ fn main() {
                         PlayerMessage::Pause => {
                             mediaplayer.pause();
                             broadcast(&ws_connections, WsOutgoingMsgKind::Pause);
-                        }, 
+                        },
+                        // TODO: send more specific error message to client
                         PlayerMessage::Resume => {
-                            mediaplayer.play().unwrap();
-                            broadcast(&ws_connections, WsOutgoingMsgKind::Resume);
+                            if mediaplayer.will_play() {
+                                match mediaplayer.play() {
+                                    Ok(()) => broadcast(&ws_connections, WsOutgoingMsgKind::Resume),
+                                    Err(()) => broadcast(&ws_connections, WsOutgoingMsgKind::Error)
+                                }
+                            } else {
+                                broadcast(&ws_connections, WsOutgoingMsgKind::Error)
+                            }
                         },
                         PlayerMessage::Stop => {
                             mediaplayer.stop();
