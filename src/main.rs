@@ -117,10 +117,15 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
             ws::Message::Ping(msg) => ctx.pong(&msg),
             ws::Message::Text(text) => {
                 match PlayerMessage::try_from(text) {
+                    // TODO: send variant of WsOutgoingMsgKind instead
                     Ok(player_msg) => {
                         match self.sender.send(player_msg){
-                            Ok(()) => ctx.text("Ok"),
-                            Err(_) => ctx.text("Err: Failed to pass message to player")
+                            Ok(()) => {
+                                //ctx.text("Ok");
+                            },
+                            Err(_) => {
+                                //ctx.text("Err: Failed to pass message to player");
+                            },
                         }
                     },
                     Err(_) => ctx.text("Err: Invalid message"),
