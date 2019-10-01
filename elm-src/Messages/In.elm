@@ -12,6 +12,7 @@ type MsgKind = Default
     | Stop
     | FsChange
     | FsState
+    | Error
 
 type MsgPayload = FsStatePayload (Dict String String) | NoPayload
 
@@ -21,7 +22,7 @@ type alias MediaItem =
   , name: String
   }
 
-
+-- TODO: replace `fail` decoder with decoder that returns `NoPayload` variant
 payloadDecoder : MsgKind -> Json.Decode.Decoder MsgPayload
 payloadDecoder kind =
   case kind of
@@ -55,4 +56,5 @@ kindFromString string =
     "Stop" -> Just Stop
     "FsState" -> Just FsState
     "FsChange" -> Just FsChange
+    "Error" -> Just Error
     _ -> Nothing

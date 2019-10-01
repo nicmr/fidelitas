@@ -91,9 +91,10 @@ update msg model =
             Messages.In.Resume -> ({model | player_state = Playing}, Cmd.none)
             Messages.In.Pause -> ({model | player_state = Paused}, Cmd.none)
             Messages.In.Stop -> ({model | player_state = Stopped}, Cmd.none)
-
+            -- TODO: resume to correct state on error message
+            Messages.In.Error -> ({model | log = model.log ++ value ++ "server informed me invalid command has been sent"}, Cmd.none)
             _ -> (model, Cmd.none)
-        Err e -> ({model | log = model.log ++ value ++ " error: msgKindError"}, Cmd.none)
+        Err e -> ({model | log = model.log ++ value ++ " error: can't decode"}, Cmd.none)
 
 
 -- Subscriptions
