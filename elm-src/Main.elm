@@ -2,7 +2,8 @@ port module Main exposing (main)
 
 import Browser
 import Html exposing (Html, button, div, text)
-import Html.Events exposing (onClick)
+import Html.Attributes as Attr
+import Html.Events exposing (onClick, onInput)
 import Http
 import Url.Builder exposing (absolute, crossOrigin)
 -- import Json.Encode
@@ -28,7 +29,7 @@ port websocketOut : String -> Cmd msg
 
 -- Msg
 
-type Msg = Increment | Decrement | Play  | Pause | Resume | Stop | WebsocketIn String
+type Msg = Play  | Pause | Resume | Stop | WebsocketIn String | VolumeSlider String
 
 
 -- Model 
@@ -54,20 +55,12 @@ init _ =
 
 type PlayerState = Paused | Playing | Stopped
 
-
-
-
 -- Update
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
-    Increment ->
-      ( { model | volume = model.volume + 1}, Cmd.none )
-    Decrement ->
-      ( { model | volume = model.volume - 1}, Cmd.none )
     Play ->
-      -- ( model, Http.get { url = absolute ["api", "play", "something"] [], expect = Http.expectString DataReceived})
       (model, websocketOut "Play;0")
     Pause ->
       (model, websocketOut "Pause")
@@ -95,6 +88,8 @@ update msg model =
             Messages.In.Error -> ({model | log = model.log ++ value ++ "server informed me invalid command has been sent"}, Cmd.none)
             _ -> (model, Cmd.none)
         Err e -> ({model | log = model.log ++ value ++ " error: can't decode"}, Cmd.none)
+    VolumeSlider vol_str ->
+      ({model | volume = String.toInt vol_str |> Maybe.withDefault model.volume}, Cmd.none)
 
 
 -- Subscriptions
@@ -109,16 +104,23 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
   div []
-    [ button [ onClick Decrement ] [ text "-" ]
-    , div [] [ text (String.fromInt model.volume) ]
-    , button [ onClick Increment ] [ text "+" ]
-    , button [ onClick Play] [text "Play"]
+    [ button [ onClick Play] [text "Play"]
     , button [ onClick Pause] [text "Pause"]
     , button [ onClick Resume] [text "Resume"]
     , button [ onClick Stop] [text "Stop"]
     , toHtmlList model.tracks
     , div [] [ text "Log:"]
     , div [] [ text model.log]
+    , div []
+      [ Html.input
+        [ Attr.type_ "range"
+        , Attr.min "0"
+        , Attr.max "125"
+        , Attr.value <| String.fromInt model.volume
+        , onInput VolumeSlider
+        ] []
+      , text <| String.fromInt model.volume
+      ]
     ]
 
 -- View Helpers
