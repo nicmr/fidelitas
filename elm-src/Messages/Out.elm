@@ -21,7 +21,7 @@ encodeMsg msg =
             Play trackid -> Json.Encode.object
                 [ typestring
                 , ("track_id", Json.Encode.int trackid)
-                ]1
+                ]
             Pause -> Json.Encode.object [typestring ]
             Stop -> Json.Encode.object [typestring ]
             Resume -> Json.Encode.object [typestring ]

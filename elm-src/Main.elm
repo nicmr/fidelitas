@@ -76,8 +76,8 @@ update msg model =
       in
       ({model | volume = volumeInt}
       -- -- TODO: Uncomment when server support is ready. Make sure 
-      -- , websocketOut <| Messages.Out.compactJson <| Messages.Out.VolumeChange volumeInt)
-      , Cmd.none)
+      , websocketOut <| Messages.Out.compactJson <| Messages.Out.VolumeChange volumeInt)
+      -- , Cmd.none)
 
     -- handle incoming websocket messages
     WebsocketIn value ->
