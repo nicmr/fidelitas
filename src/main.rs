@@ -14,8 +14,9 @@ use crossbeam_channel;
 use regex::Regex;
 use lazy_static;
 
-use serde::{Serialize};
+use serde::{Serialize, Deserialize};
 use serde_json;
+
 
 type BasicError = &'static str;
 
@@ -30,54 +31,32 @@ enum PlayerMessage {
     Stop,
     Register(Addr<PlayerWs>),
     Unregister(Addr<PlayerWs>),
+    VolumeChange(u64),
 }
 
-impl std::convert::TryFrom<String> for PlayerMessage {
-    type Error = &'static str;
-
-    fn try_from(text: String) -> Result<Self, Self::Error> {
-
-        lazy_static::lazy_static! {
-            static ref RE_PLAY: Regex = Regex::new(r"Play;(\d+)").unwrap();
-        }
-
-        if text == "Pause" {
-            Ok(PlayerMessage::Pause)
-        } else if text == "Resume" {
-            Ok(PlayerMessage::Resume)
-        } else if text == "Stop" {
-            Ok(PlayerMessage::Stop)
-        } else if let Some(caps) = RE_PLAY.captures(&text) {
-            if let Some(s) = caps.get(1) {
-                // this unwrap should never fail, u64 compatibility is ensured by the regular expression
-                Ok(PlayerMessage::Play(s.as_str().parse::<u64>().unwrap()))
-            } else {
-                Err("Cannot convert passed string to PlayerMessage.")
-            }
-        } else {
-            Err("Cannot convert passed string to PlayerMessage.")
-        }
-    }
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag="type")]
+enum IncomingMsg {
+    VolumeChange {volume: u64},
+    Play {track_id: u64},
+    Pause,
+    Stop,
+    Resume,
 }
 
-
-fn index(_req: HttpRequest) -> actix_web::Result<NamedFile> {
-    let path: PathBuf = PathBuf::from("index.html");
-    
-    Ok(NamedFile::open(path)?)
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag="type")]
+enum OutgoingMsg {
+    Play,
+    Pause,
+    Resume,
+    Stop,
+    FsChange,
+    FsState{media: HashMap<u64, String>},
+    RegisterSuccess,
+    Error,
 }
 
-fn controls(_req: HttpRequest) -> actix_web::Result<NamedFile> {
-    let path: PathBuf = PathBuf::from("controls.js");
-    
-    Ok(NamedFile::open(path)?)
-}
-
-fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::Payload) -> actix_web::Result<HttpResponse, actix_web::Error> {
-    let resp = ws::start(PlayerWs{ sender: state.sender.clone() }, &req, stream);
-    println!("{:?}", resp);
-    resp
-}
 
 struct PlayerWs {
     sender: crossbeam_channel::Sender<PlayerMessage>,
@@ -87,9 +66,9 @@ impl Actor for PlayerWs {
     type Context = ws::WebsocketContext<Self>;
 }
 
-impl actix::Handler<WsOutgoingMsgKind> for PlayerWs {
+impl actix::Handler<OutgoingMsg> for PlayerWs {
     type Result = Result<(), BasicError>;
-    fn handle(&mut self, msg: WsOutgoingMsgKind, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: OutgoingMsg, ctx: &mut Self::Context) -> Self::Result {
         ctx.text(serde_json::json!(msg).to_string());
         Ok(())
     }
@@ -111,25 +90,50 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
         }
     }
     fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
-        use std::convert::TryFrom;
+        // use std::convert::TryFrom;
 
         match msg {
             ws::Message::Ping(msg) => ctx.pong(&msg),
             ws::Message::Text(text) => {
-                match PlayerMessage::try_from(text) {
-                    // TODO: send variant of WsOutgoingMsgKind instead
-                    Ok(player_msg) => {
-                        match self.sender.send(player_msg){
+                println!("received:{}", &text);
+                let deserialized: serde_json::Result<IncomingMsg> = serde_json::from_str(&text);
+                match deserialized {
+                    Ok(msg) => {
+                        let send_result = match msg {
+                            IncomingMsg::VolumeChange{volume} => self.sender.send(PlayerMessage::VolumeChange(volume)),
+                            IncomingMsg::Play{track_id} => self.sender.send(PlayerMessage::Play(track_id)),
+                            IncomingMsg::Pause => self.sender.send(PlayerMessage::Pause),
+                            IncomingMsg::Stop => self.sender.send(PlayerMessage::Stop),
+                            IncomingMsg::Resume => self.sender.send(PlayerMessage::Resume),
+                        };
+                        match send_result {
                             Ok(()) => {
-                                //ctx.text("Ok");
-                            },
+                                // everything good
+                            }
                             Err(_) => {
-                                //ctx.text("Err: Failed to pass message to player");
-                            },
+                                // TODO: Retry? Notify client?
+                            }
                         }
+                    }
+                    Err(_) => {
+                        println!("Failed to deserialize message: '{}'", &text);
+                        // TODO:inform client that message was not understood
                     },
-                    Err(_) => ctx.text("Err: Invalid message"),
                 }
+                // match PlayerMessage::try_from(text) {
+                //     // TODO: send variant of OutgoingMsg instead
+                //     Ok(player_msg) => {
+                //         match self.sender.send(player_msg){
+                //             Ok(()) => {
+                //                 //ctx.text("Ok");
+                //             },
+                //             Err(_) => {
+                //                 //ctx.text("Err: Failed to pass message to player");
+                //             },
+                //         }
+                //     },
+                //     Err(_) => ctx.text("Err: Invalid message"),
+                // }
             }
             _ => (),
         }
@@ -152,20 +156,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(tag="type")]
-enum WsOutgoingMsgKind {
-    Play,
-    Pause,
-    Resume,
-    Stop,
-    FsChange,
-    FsState{media: HashMap<u64, String>},
-    RegisterSuccess,
-    Error,
-}
-
-impl actix::Message for WsOutgoingMsgKind {
+impl actix::Message for OutgoingMsg {
     type Result = Result<(), BasicError>;
 }
 
@@ -184,10 +175,9 @@ fn parse_media_dir(mut id: u64, path: &Path) -> Result<(u64, HashMap<u64, String
     let mut registered_media: HashMap<u64, String> = HashMap::new();
 
     lazy_static::lazy_static! {
-        static ref RE_AUDIO_EXTENSION: Regex = Regex::new(r".+\.mp3").unwrap();
+        static ref RE_AUDIO_EXTENSION: Regex = Regex::new(r".+\.opus").unwrap();
     }
     
-    // expect will only fail when lacking permissions, existence and is_dir are guaranteed. TODO: properly handle this error.
     for entry in std::fs::read_dir(path)? {
         match entry {
             Ok(good_entry) => {
@@ -214,7 +204,7 @@ fn parse_media_dir(mut id: u64, path: &Path) -> Result<(u64, HashMap<u64, String
     Ok((id, registered_media))
 }
 
-fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: WsOutgoingMsgKind) {
+fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: OutgoingMsg) {
     for conn in connections {
         match conn.try_send(
             msgkind.clone()
@@ -225,6 +215,24 @@ fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: WsOutgoingMsgKind) 
     }
 }
 
+
+fn index(_req: HttpRequest) -> actix_web::Result<NamedFile> {
+    let path: PathBuf = PathBuf::from("index.html");
+    
+    Ok(NamedFile::open(path)?)
+}
+
+fn controls(_req: HttpRequest) -> actix_web::Result<NamedFile> {
+    let path: PathBuf = PathBuf::from("controls.js");
+    
+    Ok(NamedFile::open(path)?)
+}
+
+fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::Payload) -> actix_web::Result<HttpResponse, actix_web::Error> {
+    let resp = ws::start(PlayerWs{ sender: state.sender.clone() }, &req, stream);
+    println!("{:?}", resp);
+    resp
+}
 
 fn main() {
 
@@ -284,37 +292,52 @@ fn main() {
                     match msg {
                         PlayerMessage::Play(track_id) => {
                             if let Some(track_path) = registered_media.get(&track_id) {
-                                println!("Received track on worker thread: {}-{}", track_id, track_path);
+                                println!("Received track on worker thread: k:'{}' V:'{}'", track_id, track_path);
                                 let md = vlc::Media::new_path(&vlc_instance, track_path).unwrap();
                                 mediaplayer.set_media(&md);
                                 mediaplayer.play().unwrap();
-                                broadcast(&ws_connections, WsOutgoingMsgKind::Play);
+                                broadcast(&ws_connections, OutgoingMsg::Play);
                             } else {
                                 println!("Received track request with invalid track_id: {}", track_id)
                             }                            
                         },
                         PlayerMessage::Pause => {
                             mediaplayer.pause();
-                            broadcast(&ws_connections, WsOutgoingMsgKind::Pause);
+                            broadcast(&ws_connections, OutgoingMsg::Pause);
                         },
                         // TODO: send more specific error message to client
                         PlayerMessage::Resume => {
                             if mediaplayer.will_play() {
                                 match mediaplayer.play() {
-                                    Ok(()) => broadcast(&ws_connections, WsOutgoingMsgKind::Resume),
-                                    Err(()) => broadcast(&ws_connections, WsOutgoingMsgKind::Error)
+                                    Ok(()) => broadcast(&ws_connections, OutgoingMsg::Resume),
+                                    Err(()) => broadcast(&ws_connections, OutgoingMsg::Error)
                                 }
                             } else {
-                                broadcast(&ws_connections, WsOutgoingMsgKind::Error)
+                                broadcast(&ws_connections, OutgoingMsg::Error)
                             }
                         },
                         PlayerMessage::Stop => {
                             mediaplayer.stop();
-                            broadcast(&ws_connections, WsOutgoingMsgKind::Stop);
+                            broadcast(&ws_connections, OutgoingMsg::Stop);
                         },
+                        PlayerMessage::VolumeChange(volume) => {
+                            use vlc::MediaPlayerAudioEx;
+                            use std::convert::TryInto;
+
+                            // TODO: ensure this unwrap can never fail by checking value first
+                            // TODO: replace with expect
+                            match mediaplayer.set_volume(volume.try_into().unwrap()) {
+                                Ok(()) => {
+                                    // TODO: broadcast volume change
+                                },
+                                Err(()) => {
+                                    // TODO: log? retry?
+                                }
+                            }
+                        }
                         PlayerMessage::Register(ws) => {
                             ws_connections.insert(ws.clone());
-                            match ws.try_send(WsOutgoingMsgKind::FsState{media: registered_media.clone()}){
+                            match ws.try_send(OutgoingMsg::FsState{media: registered_media.clone()}){
                                 Ok(_) => {},
                                 Err(e) => {println!("Failed to send FsChange message: {}", e)}
                             }
