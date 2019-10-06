@@ -12,6 +12,7 @@ import Dict exposing (Dict)
 
 
 import Messages.In
+import Messages.Out
 
 main =
   Browser.element
@@ -60,14 +61,25 @@ type PlayerState = Paused | Playing | Stopped
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
+    -- handle user actions
     Play ->
-      (model, websocketOut "Play;0")
+      (model, websocketOut <| Messages.Out.compactJson <| Messages.Out.Play 0)
     Pause ->
-      (model, websocketOut "Pause")
+      (model, websocketOut <| Messages.Out.compactJson <| Messages.Out.Pause)
     Resume ->
-      (model, websocketOut "Resume")
+      (model, websocketOut <| Messages.Out.compactJson <| Messages.Out.Resume)
     Stop ->
-      (model, websocketOut "Stop")
+      (model, websocketOut <| Messages.Out.compactJson <| Messages.Out.Stop)
+    VolumeSlider vol_str ->
+      let
+        volumeInt = String.toInt vol_str |> Maybe.withDefault model.volume
+      in
+      ({model | volume = volumeInt}
+      -- -- TODO: Uncomment when server support is ready. Make sure 
+      -- , websocketOut <| Messages.Out.compactJson <| Messages.Out.VolumeChange volumeInt)
+      , Cmd.none)
+
+    -- handle incoming websocket messages
     WebsocketIn value ->
       case Json.Decode.decodeString Messages.In.kindDecoder value of
         Ok kind ->
@@ -88,8 +100,7 @@ update msg model =
             Messages.In.Error -> ({model | log = model.log ++ value ++ "server informed me invalid command has been sent"}, Cmd.none)
             _ -> (model, Cmd.none)
         Err e -> ({model | log = model.log ++ value ++ " error: can't decode"}, Cmd.none)
-    VolumeSlider vol_str ->
-      ({model | volume = String.toInt vol_str |> Maybe.withDefault model.volume}, Cmd.none)
+
 
 
 -- Subscriptions
