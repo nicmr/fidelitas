@@ -90,7 +90,6 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
         }
     }
     fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
-        // use std::convert::TryFrom;
 
         match msg {
             ws::Message::Ping(msg) => ctx.pong(&msg),
@@ -120,20 +119,6 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
                         // TODO:inform client that message was not understood
                     },
                 }
-                // match PlayerMsg::try_from(text) {
-                //     // TODO: send variant of OutgoingMsg instead
-                //     Ok(player_msg) => {
-                //         match self.sender.send(player_msg){
-                //             Ok(()) => {
-                //                 //ctx.text("Ok");
-                //             },
-                //             Err(_) => {
-                //                 //ctx.text("Err: Failed to pass message to player");
-                //             },
-                //         }
-                //     },
-                //     Err(_) => ctx.text("Err: Invalid message"),
-                // }
             }
             _ => (),
         }
