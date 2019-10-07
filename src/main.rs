@@ -21,10 +21,10 @@ use serde_json;
 type BasicError = &'static str;
 
 pub struct AppState {
-    sender: crossbeam_channel::Sender<PlayerMessage>,
+    sender: crossbeam_channel::Sender<PlayerMsg>,
 }
 
-enum PlayerMessage {
+enum PlayerMsg {
     Play(u64),
     Pause,
     Resume,
@@ -59,7 +59,7 @@ enum OutgoingMsg {
 
 
 struct PlayerWs {
-    sender: crossbeam_channel::Sender<PlayerMessage>,
+    sender: crossbeam_channel::Sender<PlayerMsg>,
 }
 
 impl Actor for PlayerWs {
@@ -80,7 +80,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
         use actix::AsyncContext;
 
         let addr = ctx.address();
-        match self.sender.send(PlayerMessage::Register(addr)) {
+        match self.sender.send(PlayerMsg::Register(addr)) {
             Ok(()) => {
                 println!("Ws registered");
             },
@@ -100,11 +100,11 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
                 match deserialized {
                     Ok(msg) => {
                         let send_result = match msg {
-                            IncomingMsg::VolumeChange{volume} => self.sender.send(PlayerMessage::VolumeChange(volume)),
-                            IncomingMsg::Play{track_id} => self.sender.send(PlayerMessage::Play(track_id)),
-                            IncomingMsg::Pause => self.sender.send(PlayerMessage::Pause),
-                            IncomingMsg::Stop => self.sender.send(PlayerMessage::Stop),
-                            IncomingMsg::Resume => self.sender.send(PlayerMessage::Resume),
+                            IncomingMsg::VolumeChange{volume} => self.sender.send(PlayerMsg::VolumeChange(volume)),
+                            IncomingMsg::Play{track_id} => self.sender.send(PlayerMsg::Play(track_id)),
+                            IncomingMsg::Pause => self.sender.send(PlayerMsg::Pause),
+                            IncomingMsg::Stop => self.sender.send(PlayerMsg::Stop),
+                            IncomingMsg::Resume => self.sender.send(PlayerMsg::Resume),
                         };
                         match send_result {
                             Ok(()) => {
@@ -120,7 +120,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
                         // TODO:inform client that message was not understood
                     },
                 }
-                // match PlayerMessage::try_from(text) {
+                // match PlayerMsg::try_from(text) {
                 //     // TODO: send variant of OutgoingMsg instead
                 //     Ok(player_msg) => {
                 //         match self.sender.send(player_msg){
@@ -144,7 +144,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
         use actix::ActorContext;
 
         let addr = ctx.address();
-        match self.sender.send(PlayerMessage::Unregister(addr)) {
+        match self.sender.send(PlayerMsg::Unregister(addr)) {
             Ok(()) => {
                 println!("Ws unregistered");
             },
@@ -290,7 +290,7 @@ fn main() {
             match receiver.recv() {
                 Ok(msg) => {
                     match msg {
-                        PlayerMessage::Play(track_id) => {
+                        PlayerMsg::Play(track_id) => {
                             if let Some(track_path) = registered_media.get(&track_id) {
                                 println!("Received track on worker thread: k:'{}' V:'{}'", track_id, track_path);
                                 let md = vlc::Media::new_path(&vlc_instance, track_path).unwrap();
@@ -301,12 +301,12 @@ fn main() {
                                 println!("Received track request with invalid track_id: {}", track_id)
                             }                            
                         },
-                        PlayerMessage::Pause => {
+                        PlayerMsg::Pause => {
                             mediaplayer.pause();
                             broadcast(&ws_connections, OutgoingMsg::Pause);
                         },
                         // TODO: send more specific error message to client
-                        PlayerMessage::Resume => {
+                        PlayerMsg::Resume => {
                             if mediaplayer.will_play() {
                                 match mediaplayer.play() {
                                     Ok(()) => broadcast(&ws_connections, OutgoingMsg::Resume),
@@ -316,11 +316,11 @@ fn main() {
                                 broadcast(&ws_connections, OutgoingMsg::Error)
                             }
                         },
-                        PlayerMessage::Stop => {
+                        PlayerMsg::Stop => {
                             mediaplayer.stop();
                             broadcast(&ws_connections, OutgoingMsg::Stop);
                         },
-                        PlayerMessage::VolumeChange(volume) => {
+                        PlayerMsg::VolumeChange(volume) => {
                             use vlc::MediaPlayerAudioEx;
                             use std::convert::TryInto;
 
@@ -335,14 +335,14 @@ fn main() {
                                 }
                             }
                         }
-                        PlayerMessage::Register(ws) => {
+                        PlayerMsg::Register(ws) => {
                             ws_connections.insert(ws.clone());
                             match ws.try_send(OutgoingMsg::FsState{media: registered_media.clone()}){
                                 Ok(_) => {},
                                 Err(e) => {println!("Failed to send FsChange message: {}", e)}
                             }
                         },
-                        PlayerMessage::Unregister(ws) => {
+                        PlayerMsg::Unregister(ws) => {
                             ws_connections.remove(&ws);
                         },
                     }
