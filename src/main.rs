@@ -153,7 +153,21 @@ fn valid_directory(s: String) -> Result<(), String>{
     } else {
         Err(String::from("Not a valid path to a directory"))
     }
-    
+}
+fn valid_port(port: String) -> Result<(), String>{
+    match port.parse::<u32>() {
+        Ok(port_numeric) => {
+            if port_numeric < 65536 {
+                Ok(())
+            } else {
+                Err(String::from("Port needs to be in range 0 - 65535"))
+            }
+        },
+        Err(_) => {
+            Err(format!("'{}' is not a valid port", port))
+        }
+    }
+
 }
 
 fn parse_media_dir(mut id: u64, path: &Path) -> Result<(u64, HashMap<u64, String>), std::io::Error>{
@@ -232,6 +246,7 @@ fn main() {
             .long("port")
             .value_name("PORT")
             .help("The port the server will listen on")
+            .validator(valid_port)
             )
         .arg(clap::Arg::with_name("dir")
             .takes_value(true)
