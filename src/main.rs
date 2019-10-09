@@ -12,7 +12,7 @@ use vlc;
 use crossbeam_channel;
 
 use regex::Regex;
-use lazy_static;
+// use lazy_static;
 
 use serde::{Serialize, Deserialize};
 use serde_json;
@@ -170,24 +170,37 @@ fn valid_port(port: String) -> Result<(), String>{
 
 }
 
-fn parse_media_dir(mut id: u64, path: &Path) -> Result<(u64, HashMap<u64, String>), std::io::Error>{
-    let mut registered_media: HashMap<u64, String> = HashMap::new();
-
-    lazy_static::lazy_static! {
-        static ref RE_AUDIO_EXTENSION: Regex = Regex::new(r".+\.opus").unwrap();
+struct ParseMediaConfig {
+    extension_re : regex::Regex,
+}
+impl ParseMediaConfig {
+    // TODO: use from instead?
+    fn new(file_extensions: &Vec<&str>) -> Self {
+        let len = file_extensions.len();
+        // TODO: this can probably be written somewhat more efficiently by avoiding reallocation
+        let extension_str = file_extensions.iter()
+            .fold(String::with_capacity(len*4),|mut a, b| { a.push_str("|\\."); a.push_str(b); a});
+        let re_audio_extension = Regex::new(&format!(".+({})", &extension_str[2..])).unwrap();
+        Self {
+            extension_re: re_audio_extension,
+        }        
     }
-    
+}
+
+fn parse_media_dir(mut id: u64, path: &Path, config: &ParseMediaConfig) -> Result<(u64, HashMap<u64, String>), std::io::Error>{
+    let mut registered_media: HashMap<u64, String> = HashMap::new();    
     for entry in std::fs::read_dir(path)? {
         match entry {
             Ok(good_entry) => {
                 if good_entry.path().is_dir() {
-                    let (new_id, subdir_media) = parse_media_dir(id, &good_entry.path())?;
+                    // TODO: handle result instead of escalating with ?
+                    let (new_id, subdir_media) = parse_media_dir(id, &good_entry.path(), config)?;
                     id = new_id;
                     registered_media.extend(subdir_media);
                 } else {
                     // TODO: handle properly instead of unwrap
                     let path_str = good_entry.path().to_str().unwrap().to_string();
-                    if RE_AUDIO_EXTENSION.is_match(good_entry.file_name().to_str().unwrap()) {
+                    if config.extension_re.is_match(good_entry.file_name().to_str().unwrap()) {
                         registered_media.insert(id, path_str);
                         id += 1;
                     } else {
@@ -257,6 +270,14 @@ fn main() {
             .help("The directory whose files will be available for playback.")
             .validator(valid_directory)
             )
+        .arg(clap::Arg::with_name("extension")
+            .takes_value(true)
+            .short("e")
+            .long("extension")
+            .value_name("FILE_EXTENSION")
+            .help("Explicitly allow file extensions to be read by the program. May cause crashes if files cannot be decoded.")
+            .multiple(true)
+        )
         .get_matches();
 
 
@@ -265,14 +286,18 @@ fn main() {
 
 
     let port = matches.value_of("port").unwrap();
-    println!("Listening on port: {}...", port);
 
+    let additional_extensions : Vec<&str> = matches.values_of("extension").unwrap().collect();
+    for e in &additional_extensions {
+        println!("Additional file extension: .{}", e);
+    }   
+    let parse_media_config = ParseMediaConfig::new(&additional_extensions);
 
-    
-
-    // sender will be passed to actix web as appstate
+    // initialize the channel for communication with the libvlc handler thread
+    // sender will be passed to actix web as appstate and will be shared with websocket handlers
     // receiver will be passed to the global player thread, 
     let (sender, receiver) = crossbeam_channel::unbounded();
+
 
     let _handle = thread::spawn(move || {
         // player thread setup
@@ -282,7 +307,7 @@ fn main() {
         let mediaplayer = vlc::MediaPlayer::new(&vlc_instance).unwrap();
 
         let mut ws_connections: HashSet<Addr<PlayerWs>> = HashSet::new();
-        let (media_max_id, registered_media) = parse_media_dir(0, &path).expect("Unable to read media dir.");
+        let (_media_max_id, registered_media) = parse_media_dir(0, &path, &parse_media_config).expect("Unable to read media dir.");
 
 
         // channel handling loop
@@ -356,6 +381,7 @@ fn main() {
         sender: sender,
     });
 
+    println!("Listening on port: {}...", port);
     HttpServer::new(move || {
         App::new()
             .register_data(app_state.clone())
