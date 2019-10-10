@@ -83,22 +83,34 @@ update msg model =
     WebsocketIn value ->
       case Json.Decode.decodeString Messages.In.kindDecoder value of
         Ok kind ->
-          case kind of
-            Messages.In.FsState -> case  Json.Decode.decodeString (Messages.In.payloadDecoder kind) value of
-              Ok payload ->
-                case payload of
-                  Messages.In.FsStatePayload new_tracks->
-                    ({model | log = model.log ++ value ++ " payloadDecoded", tracks = new_tracks}, Cmd.none)
-                  _ -> ({model | log = model.log ++ value ++ " this shouldn't happen"}, Cmd.none)
-              Err e ->  ({model | log = model.log ++ value ++ " error: payloadDecodeError"}, Cmd.none)
-            Messages.In.RegisterSuccess -> ({model | log = model.log ++ value ++ " registerSuccess"}, Cmd.none)
-            Messages.In.Play -> ({model | player_state = Playing}, Cmd.none)
-            Messages.In.Resume -> ({model | player_state = Playing}, Cmd.none)
-            Messages.In.Pause -> ({model | player_state = Paused}, Cmd.none)
-            Messages.In.Stop -> ({model | player_state = Stopped}, Cmd.none)
-            -- TODO: resume to correct state on error message
-            Messages.In.Error -> ({model | log = model.log ++ value ++ "server informed me invalid command has been sent"}, Cmd.none)
-            _ -> (model, Cmd.none)
+          let
+              payloadDecoder = Messages.In.payloadDecoder kind
+          in
+            case kind of
+              Messages.In.FsState -> case  Json.Decode.decodeString payloadDecoder value of
+                Ok payload ->
+                  case payload of
+                    Messages.In.FsStatePayload new_tracks->
+                      ({model | log = model.log ++ value ++ " payloadDecoded", tracks = new_tracks}, Cmd.none)
+                    _ -> ({model | log = model.log ++ value ++ "recognised FsState message but payload didn't match"}, Cmd.none)
+                Err _ ->  ({model | log = model.log ++ value ++ " error: payloadDecodeError"}, Cmd.none)
+
+              Messages.In.VolumeChange -> case Json.Decode.decodeString payloadDecoder value of 
+                Ok payload ->
+                  case payload of 
+                    Messages.In.VolumeChangePayload new_volume ->
+                      ({model | volume = new_volume}, Cmd.none)
+                    _ -> ({model | log = model.log ++ value ++ "recognised VolumeChange message but payload didn't match"}, Cmd.none)
+                Err _ ->  ({model | log = model.log ++ value ++ " error: payloadDecodeError"}, Cmd.none)
+
+              Messages.In.RegisterSuccess -> ({model | log = model.log ++ value ++ " registerSuccess"}, Cmd.none)
+              Messages.In.Play -> ({model | player_state = Playing}, Cmd.none)
+              Messages.In.Resume -> ({model | player_state = Playing}, Cmd.none)
+              Messages.In.Pause -> ({model | player_state = Paused}, Cmd.none)
+              Messages.In.Stop -> ({model | player_state = Stopped}, Cmd.none)
+              -- TODO: resume to last correct state on error message
+              Messages.In.Error -> ({model | log = model.log ++ value ++ "server informed me invalid command has been sent"}, Cmd.none)
+              _ -> (model, Cmd.none)
         Err e -> ({model | log = model.log ++ value ++ " error: can't decode"}, Cmd.none)
 
 

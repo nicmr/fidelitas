@@ -13,8 +13,9 @@ type MsgKind = Default
     | FsChange
     | FsState
     | Error
+    | VolumeChange
 
-type MsgPayload = FsStatePayload (Dict String String) | NoPayload
+type MsgPayload = FsStatePayload (Dict String String) | VolumeChangePayload (Int) | NoPayload
 
 type alias MediaItem =
   {
@@ -27,6 +28,7 @@ payloadDecoder : MsgKind -> Json.Decode.Decoder MsgPayload
 payloadDecoder kind =
   case kind of
     FsState -> Json.Decode.map FsStatePayload (field "media" (Json.Decode.dict Json.Decode.string))
+    VolumeChange -> Json.Decode.map VolumeChangePayload (field "volume" (Json.Decode.int))
     _ -> fail <| "No payload can be decoded for this msg kind"
 
 -- MediaItem decoding
@@ -56,5 +58,6 @@ kindFromString string =
     "Stop" -> Just Stop
     "FsState" -> Just FsState
     "FsChange" -> Just FsChange
+    "VolumeChange" -> Just VolumeChange
     "Error" -> Just Error
     _ -> Nothing
