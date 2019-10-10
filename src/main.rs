@@ -55,6 +55,7 @@ enum OutgoingMsg {
     FsState{media: HashMap<u64, String>},
     RegisterSuccess,
     Error,
+    VolumeChange{volume: u64}
 }
 
 
@@ -174,7 +175,6 @@ struct ParseMediaConfig {
     extension_re : regex::Regex,
 }
 impl ParseMediaConfig {
-    // TODO: use from instead?
     fn new(file_extensions: &Vec<&str>) -> Self {
         let len = file_extensions.len();
         // TODO: this can probably be written somewhat more efficiently by avoiding reallocation
@@ -354,6 +354,7 @@ fn main() {
                             match mediaplayer.set_volume(volume.try_into().unwrap()) {
                                 Ok(()) => {
                                     // TODO: broadcast volume change
+                                   broadcast(&ws_connections, OutgoingMsg::VolumeChange{volume: volume});
                                 },
                                 Err(()) => {
                                     // TODO: log? retry?
