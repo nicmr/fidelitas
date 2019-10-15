@@ -155,6 +155,7 @@ fn valid_directory(s: String) -> Result<(), String>{
         Err(String::from("Not a valid path to a directory"))
     }
 }
+
 fn valid_port(port: String) -> Result<(), String>{
     match port.parse::<u32>() {
         Ok(port_numeric) => {
@@ -175,7 +176,7 @@ struct ParseMediaConfig {
     extension_re : regex::Regex,
 }
 impl ParseMediaConfig {
-    fn new(file_extensions: &Vec<&str>) -> Self {
+    fn new(file_extensions: &HashSet<&str>) -> Self {
         let len = file_extensions.len();
         // TODO: this can probably be written somewhat more efficiently by avoiding reallocation
         let extension_str = file_extensions.iter()
@@ -222,7 +223,7 @@ fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: OutgoingMsg) {
             msgkind.clone()
         ){
             Ok(_) => {},
-            Err(e) => {println!("Failed to send: {}", e)}
+            Err(e) => {println!("Failed to broadcast: {}", e)}
         }
     }
 }
@@ -287,14 +288,32 @@ fn main() {
 
     let port = matches.value_of("port").unwrap();
 
-    let additional_extensions : Vec<&str> = matches.values_of("extension").unwrap().collect();
-    for e in &additional_extensions {
-        println!("Additional file extension: .{}", e);
-    }   
-    let parse_media_config = ParseMediaConfig::new(&additional_extensions);
+
+    let parse_media_config = {
+        let mut extension_set : HashSet<&str> = HashSet::with_capacity(5);
+        // add default extensions
+        // TODO: instead read from a default settings file
+        extension_set.insert("mp3");
+        extension_set.insert("ogg");
+        extension_set.insert("opus");
+        extension_set.insert("wav");
+        extension_set.insert("m4a");
+
+        match matches.values_of("extension") {
+            Some(a) => {
+                let user_set : HashSet<&str> = a.collect();
+                extension_set.reserve(user_set.len());
+                user_set.iter().for_each(|a| {extension_set.insert(a);});
+            },
+            None => {
+            }
+        }
+
+        ParseMediaConfig::new(&extension_set)
+    };
 
     // initialize the channel for communication with the libvlc handler thread
-    // sender will be passed to actix web as appstate and will be shared with websocket handlers
+    // sender will be passed to actix web as appstate and can be safely shared across websocket handlers
     // receiver will be passed to the global player thread, 
     let (sender, receiver) = crossbeam_channel::unbounded();
 
@@ -353,7 +372,6 @@ fn main() {
                             // TODO: replace with expect
                             match mediaplayer.set_volume(volume.try_into().unwrap()) {
                                 Ok(()) => {
-                                    // TODO: broadcast volume change
                                    broadcast(&ws_connections, OutgoingMsg::VolumeChange{volume: volume});
                                 },
                                 Err(()) => {
