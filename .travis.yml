@@ -23,9 +23,17 @@ env:
     - TARGET="x86_64-unknown-linux-gnu"
     - TARGET="armv7-unknown-linux-gnueabihf"
 
-# matrix:
-#   allow_failures:
-#   - TARGET="armv7-unknown-linux-gnueabihf"
+jobs:
+  include:
+    - stage: finish_deploy
+      deploy:
+        provider: releases
+        skip_cleanup: true
+        api_key: $GITHUB_ACCESS_TOKEN 
+        title: $GITHUB_RELEASE_TITLE
+        on:
+          branch: master
+        draft: false
 
 install:
   # elm support
@@ -35,7 +43,7 @@ install:
   - if [ $TARGET == "x86_64-unknown-linux-gnu" ]; then sudo apt-get install libvlc-dev; fi
 
 script:
-  - elm make elm-src/Main.elm
+  - elm make elm-src/Main.elm --output=controls.js
   - |
     if [ $TARGET == "x86_64-unknown-linux-gnu" ];
     then
@@ -51,29 +59,20 @@ script:
     fi
 
 
-# TODO: fix deploy
-# before_deploy:
+before_deploy:
+  - mkdir "release_${TARGET}"
+  - cp "target/${TARGET}/fidelitas" "release_${TARGET}/"
+  - cp index.html "release_${TARGET}/"
+  - cp controls.js "release_${TARGET}/"
+  - tar -zcvf "fidelitas_${TARGET}.tar.gz" "release_${TARGET}"
 
-
-  # package files for x64 release
-  # - mkdir "release_${TARGET}"
-  # - cp target/debug/fidelitas "release_${TARGET}/"
-  # - cp index.html release_${TARGET}/
-  # - tar -zcvf fidelitas_${TARGET}.tar.gz "release_${TARGET}"
-
-  # # package files for armv7 release
-  # - mkdir linux_armv7
-  # - cp target/armv7-unknown-linux-gnueabihf/debug/fidelitas linux_armv7
-  # - cp index.html linux_x64
-  # - tar -zcvf fidelitas_linux_armv7.tar.gz linux_armv7
-
-# deploy:
-#   provider: releases
-#   skip_cleanup: true
-#   api_key: $GITHUB_ACCESS_TOKEN 
-#   file:
-#   - "fidelitas_linux_x64.tar.gz"
-#   - "fidelitas_linux_armv7.tar.gz"
-#   title: $GITHUB_RELEASE_TITLE
-#   on:
-#     branch: master
+deploy:
+  provider: releases
+  skip_cleanup: true
+  api_key: $GITHUB_ACCESS_TOKEN 
+  file:
+  - "fidelitas_$TARGET.tar.gz"
+  title: $GITHUB_RELEASE_TITLE
+  on:
+    branch: master
+  draft: true
