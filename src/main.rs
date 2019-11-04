@@ -309,6 +309,16 @@ fn main() {
             }
         }
 
+        // print summary of enabled file extensions
+        {
+            let mut extension_info = String::from("Enabled file extensions: ");
+            for extension in &extension_set {
+                extension_info.push_str(extension);
+                extension_info.push_str(", ");
+            }
+            println!("{}", extension_info);
+        }
+
         ParseMediaConfig::new(&extension_set)
     };
 
