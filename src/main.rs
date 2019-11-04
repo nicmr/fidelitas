@@ -12,50 +12,218 @@ use vlc;
 use crossbeam_channel;
 
 use regex::Regex;
-use lazy_static;
+// use lazy_static;
 
-use serde::{Serialize};
+use serde::{Serialize, Deserialize};
 use serde_json;
+
 
 type BasicError = &'static str;
 
 pub struct AppState {
-    sender: crossbeam_channel::Sender<PlayerMessage>,
+    sender: crossbeam_channel::Sender<PlayerMsg>,
 }
 
-enum PlayerMessage {
+enum PlayerMsg {
     Play(u64),
     Pause,
     Resume,
     Stop,
     Register(Addr<PlayerWs>),
     Unregister(Addr<PlayerWs>),
+    VolumeChange(u64),
 }
 
-impl std::convert::TryFrom<String> for PlayerMessage {
-    type Error = &'static str;
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag="type")]
+enum IncomingMsg {
+    VolumeChange {volume: u64},
+    Play {track_id: u64},
+    Pause,
+    Stop,
+    Resume,
+}
 
-    fn try_from(text: String) -> Result<Self, Self::Error> {
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag="type")]
+enum OutgoingMsg {
+    Play,
+    Pause,
+    Resume,
+    Stop,
+    FsChange,
+    FsState{media: HashMap<u64, String>},
+    RegisterSuccess,
+    Error,
+    VolumeChange{volume: u64}
+}
 
-        lazy_static::lazy_static! {
-            static ref RE_PLAY: Regex = Regex::new(r"Play;(\d+)").unwrap();
+
+struct PlayerWs {
+    sender: crossbeam_channel::Sender<PlayerMsg>,
+}
+
+impl Actor for PlayerWs {
+    type Context = ws::WebsocketContext<Self>;
+}
+
+impl actix::Handler<OutgoingMsg> for PlayerWs {
+    type Result = Result<(), BasicError>;
+    fn handle(&mut self, msg: OutgoingMsg, ctx: &mut Self::Context) -> Self::Result {
+        ctx.text(serde_json::json!(msg).to_string());
+        Ok(())
+    }
+}
+
+impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
+    fn started(&mut self, ctx: &mut Self::Context) {
+        // bring trait into scope for access to ctx.address()
+        use actix::AsyncContext;
+
+        let addr = ctx.address();
+        match self.sender.send(PlayerMsg::Register(addr)) {
+            Ok(()) => {
+                println!("Ws registered");
+            },
+            Err(e) => {
+                println!("Ws registration failed: {}", e);
+            },
         }
+    }
+    fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
 
-        if text == "Pause" {
-            Ok(PlayerMessage::Pause)
-        } else if text == "Resume" {
-            Ok(PlayerMessage::Resume)
-        } else if text == "Stop" {
-            Ok(PlayerMessage::Stop)
-        } else if let Some(caps) = RE_PLAY.captures(&text) {
-            if let Some(s) = caps.get(1) {
-                // this unwrap should never fail, u64 compatibility is ensured by the regular expression
-                Ok(PlayerMessage::Play(s.as_str().parse::<u64>().unwrap()))
-            } else {
-                Err("Cannot convert passed string to PlayerMessage.")
+        match msg {
+            ws::Message::Ping(msg) => ctx.pong(&msg),
+            ws::Message::Text(text) => {
+                println!("received:{}", &text);
+                let deserialized: serde_json::Result<IncomingMsg> = serde_json::from_str(&text);
+                match deserialized {
+                    Ok(msg) => {
+                        let send_result = match msg {
+                            IncomingMsg::VolumeChange{volume} => self.sender.send(PlayerMsg::VolumeChange(volume)),
+                            IncomingMsg::Play{track_id} => self.sender.send(PlayerMsg::Play(track_id)),
+                            IncomingMsg::Pause => self.sender.send(PlayerMsg::Pause),
+                            IncomingMsg::Stop => self.sender.send(PlayerMsg::Stop),
+                            IncomingMsg::Resume => self.sender.send(PlayerMsg::Resume),
+                        };
+                        match send_result {
+                            Ok(()) => {
+                                // everything good
+                            }
+                            Err(_) => {
+                                // TODO: Retry? Notify client?
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        println!("Failed to deserialize message: '{}'", &text);
+                        // TODO:inform client that message was not understood
+                    },
+                }
             }
-        } else {
-            Err("Cannot convert passed string to PlayerMessage.")
+            _ => (),
+        }
+    }
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        //bring traits into scope for access to ctx.address() and ctx.stop()
+        use actix::AsyncContext;
+        use actix::ActorContext;
+
+        let addr = ctx.address();
+        match self.sender.send(PlayerMsg::Unregister(addr)) {
+            Ok(()) => {
+                println!("Ws unregistered");
+            },
+            Err(e) => {
+                println!("Ws unregistration failed: {}", e);
+            },
+        }
+        ctx.stop();
+    }
+}
+
+impl actix::Message for OutgoingMsg {
+    type Result = Result<(), BasicError>;
+}
+
+
+fn valid_directory(s: String) -> Result<(), String>{
+    let path = Path::new(&s);
+    if path.is_dir() {
+        Ok(())
+    } else {
+        Err(String::from("Not a valid path to a directory"))
+    }
+}
+
+fn valid_port(port: String) -> Result<(), String>{
+    match port.parse::<u32>() {
+        Ok(port_numeric) => {
+            if port_numeric < 65536 {
+                Ok(())
+            } else {
+                Err(String::from("Port needs to be in range 0 - 65535"))
+            }
+        },
+        Err(_) => {
+            Err(format!("'{}' is not a valid port", port))
+        }
+    }
+
+}
+
+struct ParseMediaConfig {
+    extension_re : regex::Regex,
+}
+impl ParseMediaConfig {
+    fn new(file_extensions: &HashSet<&str>) -> Self {
+        let len = file_extensions.len();
+        // TODO: this can probably be written somewhat more efficiently by avoiding reallocation
+        let extension_str = file_extensions.iter()
+            .fold(String::with_capacity(len*4),|mut a, b| { a.push_str("|\\."); a.push_str(b); a});
+        let re_audio_extension = Regex::new(&format!(".+({})", &extension_str[2..])).unwrap();
+        Self {
+            extension_re: re_audio_extension,
+        }        
+    }
+}
+
+fn parse_media_dir(mut id: u64, path: &Path, config: &ParseMediaConfig) -> Result<(u64, HashMap<u64, String>), std::io::Error>{
+    let mut registered_media: HashMap<u64, String> = HashMap::new();    
+    for entry in std::fs::read_dir(path)? {
+        match entry {
+            Ok(good_entry) => {
+                if good_entry.path().is_dir() {
+                    // TODO: handle result instead of escalating with ?
+                    let (new_id, subdir_media) = parse_media_dir(id, &good_entry.path(), config)?;
+                    id = new_id;
+                    registered_media.extend(subdir_media);
+                } else {
+                    // TODO: handle properly instead of unwrap
+                    let path_str = good_entry.path().to_str().unwrap().to_string();
+                    if config.extension_re.is_match(good_entry.file_name().to_str().unwrap()) {
+                        registered_media.insert(id, path_str);
+                        id += 1;
+                    } else {
+                        println!("Ignoring file with unsupported file type in media directory: {}.", path_str)
+                    }
+                }
+            },
+            Err(e) => {
+                println!("Failed to read a file in the media directory: {}",e )
+            }
+        }
+    }
+    Ok((id, registered_media))
+}
+
+fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: OutgoingMsg) {
+    for conn in connections {
+        match conn.try_send(
+            msgkind.clone()
+        ){
+            Ok(_) => {},
+            Err(e) => {println!("Failed to broadcast: {}", e)}
         }
     }
 }
@@ -79,153 +247,6 @@ fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::
     resp
 }
 
-struct PlayerWs {
-    sender: crossbeam_channel::Sender<PlayerMessage>,
-}
-
-impl Actor for PlayerWs {
-    type Context = ws::WebsocketContext<Self>;
-}
-
-impl actix::Handler<WsOutgoingMsgKind> for PlayerWs {
-    type Result = Result<(), BasicError>;
-    fn handle(&mut self, msg: WsOutgoingMsgKind, ctx: &mut Self::Context) -> Self::Result {
-        ctx.text(serde_json::json!(msg).to_string());
-        Ok(())
-    }
-}
-
-impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
-    fn started(&mut self, ctx: &mut Self::Context) {
-        // bring trait into scope for access to ctx.address()
-        use actix::AsyncContext;
-
-        let addr = ctx.address();
-        match self.sender.send(PlayerMessage::Register(addr)) {
-            Ok(()) => {
-                println!("Ws registered");
-            },
-            Err(e) => {
-                println!("Ws registration failed: {}", e);
-            },
-        }
-    }
-    fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
-        use std::convert::TryFrom;
-
-        match msg {
-            ws::Message::Ping(msg) => ctx.pong(&msg),
-            ws::Message::Text(text) => {
-                match PlayerMessage::try_from(text) {
-                    // TODO: send variant of WsOutgoingMsgKind instead
-                    Ok(player_msg) => {
-                        match self.sender.send(player_msg){
-                            Ok(()) => {
-                                //ctx.text("Ok");
-                            },
-                            Err(_) => {
-                                //ctx.text("Err: Failed to pass message to player");
-                            },
-                        }
-                    },
-                    Err(_) => ctx.text("Err: Invalid message"),
-                }
-            }
-            _ => (),
-        }
-    }
-    fn finished(&mut self, ctx: &mut Self::Context) {
-        //bring traits into scope for access to ctx.address() and ctx.stop()
-        use actix::AsyncContext;
-        use actix::ActorContext;
-
-        let addr = ctx.address();
-        match self.sender.send(PlayerMessage::Unregister(addr)) {
-            Ok(()) => {
-                println!("Ws unregistered");
-            },
-            Err(e) => {
-                println!("Ws unregistration failed: {}", e);
-            },
-        }
-        ctx.stop();
-    }
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(tag="type")]
-enum WsOutgoingMsgKind {
-    Play,
-    Pause,
-    Resume,
-    Stop,
-    FsChange,
-    FsState{media: HashMap<u64, String>},
-    RegisterSuccess,
-    Error,
-}
-
-impl actix::Message for WsOutgoingMsgKind {
-    type Result = Result<(), BasicError>;
-}
-
-
-fn valid_directory(s: String) -> Result<(), String>{
-    let path = Path::new(&s);
-    if path.is_dir() {
-        Ok(())
-    } else {
-        Err(String::from("Not a valid path to a directory"))
-    }
-    
-}
-
-fn parse_media_dir(mut id: u64, path: &Path) -> Result<(u64, HashMap<u64, String>), std::io::Error>{
-    let mut registered_media: HashMap<u64, String> = HashMap::new();
-
-    lazy_static::lazy_static! {
-        static ref RE_AUDIO_EXTENSION: Regex = Regex::new(r".+\.mp3").unwrap();
-    }
-    
-    // expect will only fail when lacking permissions, existence and is_dir are guaranteed. TODO: properly handle this error.
-    for entry in std::fs::read_dir(path)? {
-        match entry {
-            Ok(good_entry) => {
-                if good_entry.path().is_dir() {
-                    let (new_id, subdir_media) = parse_media_dir(id, &good_entry.path())?;
-                    id = new_id;
-                    registered_media.extend(subdir_media);
-                } else {
-                    // TODO: handle properly instead of unwrap
-                    let path_str = good_entry.path().to_str().unwrap().to_string();
-                    if RE_AUDIO_EXTENSION.is_match(good_entry.file_name().to_str().unwrap()) {
-                        registered_media.insert(id, path_str);
-                        id += 1;
-                    } else {
-                        println!("Ignoring file with unsupported file type in media directory: {}.", path_str)
-                    }
-                }
-            },
-            Err(e) => {
-                println!("Failed to read a file in the media directory: {}",e )
-            }
-        }
-    }
-    Ok((id, registered_media))
-}
-
-fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: WsOutgoingMsgKind) {
-    for conn in connections {
-        match conn.try_send(
-            msgkind.clone()
-        ){
-            Ok(_) => {},
-            Err(e) => {println!("Failed to send: {}", e)}
-        }
-    }
-}
-
-
 fn main() {
 
     let matches = clap::App::new("Fidelitas")
@@ -239,6 +260,7 @@ fn main() {
             .long("port")
             .value_name("PORT")
             .help("The port the server will listen on")
+            .validator(valid_port)
             )
         .arg(clap::Arg::with_name("dir")
             .takes_value(true)
@@ -249,6 +271,14 @@ fn main() {
             .help("The directory whose files will be available for playback.")
             .validator(valid_directory)
             )
+        .arg(clap::Arg::with_name("extension")
+            .takes_value(true)
+            .short("e")
+            .long("extension")
+            .value_name("FILE_EXTENSION")
+            .help("Explicitly allow file extensions to be read by the program. May cause crashes if files cannot be decoded.")
+            .multiple(true)
+        )
         .get_matches();
 
 
@@ -257,14 +287,36 @@ fn main() {
 
 
     let port = matches.value_of("port").unwrap();
-    println!("Listening on port: {}...", port);
 
 
-    
+    let parse_media_config = {
+        let mut extension_set : HashSet<&str> = HashSet::with_capacity(5);
+        // add default extensions
+        // TODO: instead read from a default settings file
+        extension_set.insert("mp3");
+        extension_set.insert("ogg");
+        extension_set.insert("opus");
+        extension_set.insert("wav");
+        extension_set.insert("m4a");
 
-    // sender will be passed to actix web as appstate
+        match matches.values_of("extension") {
+            Some(a) => {
+                let user_set : HashSet<&str> = a.collect();
+                extension_set.reserve(user_set.len());
+                user_set.iter().for_each(|a| {extension_set.insert(a);});
+            },
+            None => {
+            }
+        }
+
+        ParseMediaConfig::new(&extension_set)
+    };
+
+    // initialize the channel for communication with the libvlc handler thread
+    // sender will be passed to actix web as appstate and can be safely shared across websocket handlers
     // receiver will be passed to the global player thread, 
     let (sender, receiver) = crossbeam_channel::unbounded();
+
 
     let _handle = thread::spawn(move || {
         // player thread setup
@@ -274,7 +326,7 @@ fn main() {
         let mediaplayer = vlc::MediaPlayer::new(&vlc_instance).unwrap();
 
         let mut ws_connections: HashSet<Addr<PlayerWs>> = HashSet::new();
-        let (media_max_id, registered_media) = parse_media_dir(0, &path).expect("Unable to read media dir.");
+        let (_media_max_id, registered_media) = parse_media_dir(0, &path, &parse_media_config).expect("Unable to read media dir.");
 
 
         // channel handling loop
@@ -282,44 +334,59 @@ fn main() {
             match receiver.recv() {
                 Ok(msg) => {
                     match msg {
-                        PlayerMessage::Play(track_id) => {
+                        PlayerMsg::Play(track_id) => {
                             if let Some(track_path) = registered_media.get(&track_id) {
-                                println!("Received track on worker thread: {}-{}", track_id, track_path);
+                                println!("Received track on worker thread: k:'{}' V:'{}'", track_id, track_path);
                                 let md = vlc::Media::new_path(&vlc_instance, track_path).unwrap();
                                 mediaplayer.set_media(&md);
                                 mediaplayer.play().unwrap();
-                                broadcast(&ws_connections, WsOutgoingMsgKind::Play);
+                                broadcast(&ws_connections, OutgoingMsg::Play);
                             } else {
                                 println!("Received track request with invalid track_id: {}", track_id)
                             }                            
                         },
-                        PlayerMessage::Pause => {
+                        PlayerMsg::Pause => {
                             mediaplayer.pause();
-                            broadcast(&ws_connections, WsOutgoingMsgKind::Pause);
+                            broadcast(&ws_connections, OutgoingMsg::Pause);
                         },
                         // TODO: send more specific error message to client
-                        PlayerMessage::Resume => {
+                        PlayerMsg::Resume => {
                             if mediaplayer.will_play() {
                                 match mediaplayer.play() {
-                                    Ok(()) => broadcast(&ws_connections, WsOutgoingMsgKind::Resume),
-                                    Err(()) => broadcast(&ws_connections, WsOutgoingMsgKind::Error)
+                                    Ok(()) => broadcast(&ws_connections, OutgoingMsg::Resume),
+                                    Err(()) => broadcast(&ws_connections, OutgoingMsg::Error)
                                 }
                             } else {
-                                broadcast(&ws_connections, WsOutgoingMsgKind::Error)
+                                broadcast(&ws_connections, OutgoingMsg::Error)
                             }
                         },
-                        PlayerMessage::Stop => {
+                        PlayerMsg::Stop => {
                             mediaplayer.stop();
-                            broadcast(&ws_connections, WsOutgoingMsgKind::Stop);
+                            broadcast(&ws_connections, OutgoingMsg::Stop);
                         },
-                        PlayerMessage::Register(ws) => {
+                        PlayerMsg::VolumeChange(volume) => {
+                            use vlc::MediaPlayerAudioEx;
+                            use std::convert::TryInto;
+
+                            // TODO: ensure this unwrap can never fail by checking value first
+                            // TODO: replace with expect
+                            match mediaplayer.set_volume(volume.try_into().unwrap()) {
+                                Ok(()) => {
+                                   broadcast(&ws_connections, OutgoingMsg::VolumeChange{volume: volume});
+                                },
+                                Err(()) => {
+                                    // TODO: log? retry?
+                                }
+                            }
+                        }
+                        PlayerMsg::Register(ws) => {
                             ws_connections.insert(ws.clone());
-                            match ws.try_send(WsOutgoingMsgKind::FsState{media: registered_media.clone()}){
+                            match ws.try_send(OutgoingMsg::FsState{media: registered_media.clone()}){
                                 Ok(_) => {},
                                 Err(e) => {println!("Failed to send FsChange message: {}", e)}
                             }
                         },
-                        PlayerMessage::Unregister(ws) => {
+                        PlayerMsg::Unregister(ws) => {
                             ws_connections.remove(&ws);
                         },
                     }
@@ -333,6 +400,7 @@ fn main() {
         sender: sender,
     });
 
+    println!("Listening on port: {}...", port);
     HttpServer::new(move || {
         App::new()
             .register_data(app_state.clone())
