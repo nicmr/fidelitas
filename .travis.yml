@@ -56,12 +56,13 @@ script:
       mkdir cross-artifacts;
       docker build -f dockerfiles/fidelitas-cross-armv7.Dockerfile -t fidelitas-cross-armv7 .;
       docker run -v $PWD/cross-artifacts:/artifacts:rw fidelitas-cross-armv7;
+      install -D "cross-artifacts/fidelitas" "target/${TARGET}/debug/fidelitas";
     fi
 
 
 before_deploy:
   - mkdir "release_${TARGET}"
-  - cp "target/${TARGET}/fidelitas" "release_${TARGET}/"
+  - cp "target/${TARGET}/debug/fidelitas" "release_${TARGET}/"
   - cp index.html "release_${TARGET}/"
   - cp controls.js "release_${TARGET}/"
   - tar -zcvf "fidelitas_${TARGET}.tar.gz" "release_${TARGET}"
