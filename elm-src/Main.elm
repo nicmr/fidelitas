@@ -30,7 +30,7 @@ port websocketOut : String -> Cmd msg
 
 -- Msg
 
-type Msg = Play  | Pause | Resume | Stop | WebsocketIn String | VolumeSlider String
+type Msg = Play (Maybe String) | Pause | Resume | Stop | VolumeSlider String |  WebsocketIn String
 
 
 -- Model 
@@ -40,16 +40,20 @@ type alias Model =
   , player_state: PlayerState
   , log: String
   , tracks: Dict String String
+  , selected_track: String
   }
 
 
 init : () -> (Model, Cmd Msg)
 init _ =
   (
-    { volume = 0
+    { volume = 50
     , player_state = Stopped
     , log = ""
     , tracks = Dict.empty
+    -- better initial value possible?
+    -- might want to change field to Maybe String
+    , selected_track = "0"
     }
     , Cmd.none
   )
@@ -62,8 +66,24 @@ update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
     -- handle user actions
-    Play ->
-      (model, websocketOut <| Messages.Out.compactJson <| Messages.Out.Play 0)
+    Play maybeTrackID->
+      case maybeTrackID of
+        Just id ->
+            ( {model | selected_track = id }
+            , websocketOut
+                <| Messages.Out.compactJson
+                <| Messages.Out.Play
+                <| Maybe.withDefault 0
+                <| String.toInt id
+            )
+        Nothing ->
+            ( model
+            , websocketOut
+                <| Messages.Out.compactJson
+                <| Messages.Out.Play
+                <| Maybe.withDefault 0
+                <| String.toInt model.selected_track
+            )
     Pause ->
       (model, websocketOut <| Messages.Out.compactJson <| Messages.Out.Pause)
     Resume ->
@@ -75,7 +95,6 @@ update msg model =
         volumeInt = String.toInt vol_str |> Maybe.withDefault model.volume
       in
       ({model | volume = volumeInt}
-      -- -- TODO: Uncomment when server support is ready. Make sure 
       , websocketOut <| Messages.Out.compactJson <| Messages.Out.VolumeChange volumeInt)
       -- , Cmd.none)
 
@@ -118,7 +137,7 @@ update msg model =
 -- Subscriptions
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions _ =
   websocketIn WebsocketIn
 
 
@@ -127,13 +146,13 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
   div []
-    [ button [ onClick Play] [text "Play"]
+    [ button [ onClick (Play Nothing)] [text "Play"]
     , button [ onClick Pause] [text "Pause"]
     , button [ onClick Resume] [text "Resume"]
     , button [ onClick Stop] [text "Stop"]
-    , toHtmlList model.tracks
-    , div [] [ text "Log:"]
-    , div [] [ text model.log]
+    -- , toHtmlList model.tracks
+    , toDivList model.tracks
+    
     , div []
       [ Html.input
         [ Attr.type_ "range"
@@ -143,15 +162,24 @@ view model =
         , onInput VolumeSlider
         ] []
       , text <| String.fromInt model.volume
+      , div [] [ text "Log:"]
+      , div [] [ text model.log]
       ]
     ]
 
 -- View Helpers
 
-toHtmlList : Dict String String -> Html Msg
-toHtmlList dict = 
-  Html.ul [] (Dict.toList dict |> List.map toLi)
+toDivList : Dict String String -> Html Msg
+toDivList dict =
+  div [] (Dict.toList dict |> List.map toClickableDiv)
 
-toLi : (String, String) -> Html Msg
-toLi (id, name) =
-  Html.li [] [text ("ID: " ++ id ++ " Name: " ++ name)]
+toClickableDiv : (String, String) -> Html Msg
+toClickableDiv (id, name) =
+  div
+    [ onClick (Play (Just id))
+    , Attr.style "cursor" "pointer"
+    ]
+    [ Html.p []
+        [ text <| name
+        ]
+    ]
