@@ -172,6 +172,21 @@ fn valid_port(port: String) -> Result<(), String>{
 
 }
 
+fn populate_html_template(ip: &str, port: &str) -> std::io::Result<()> {
+    use std::fs;
+    use std::io::prelude::*;
+    
+    let template = fs::read_to_string("./templates/index.html")?;
+    let populated =
+        template
+            .replace("{{IP}}", ip)
+            .replace("{{PORT}}", port);
+    let mut file = fs::File::create("./static/index.html")?;
+    file.write_all(populated.as_bytes())?;
+    Ok(())
+}
+
+
 struct ParseMediaConfig {
     extension_re : regex::Regex,
 }
@@ -230,13 +245,13 @@ fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: OutgoingMsg) {
 
 
 fn index(_req: HttpRequest) -> actix_web::Result<NamedFile> {
-    let path: PathBuf = PathBuf::from("index.html");
+    let path: PathBuf = PathBuf::from("./static/index.html");
     
     Ok(NamedFile::open(path)?)
 }
 
 fn controls(_req: HttpRequest) -> actix_web::Result<NamedFile> {
-    let path: PathBuf = PathBuf::from("controls.js");
+    let path: PathBuf = PathBuf::from("./static/controls.js");
     
     Ok(NamedFile::open(path)?)
 }
@@ -287,6 +302,19 @@ fn main() {
 
 
     let port = matches.value_of("port").unwrap();
+
+    // populate html template
+    match populate_html_template("localhost", port) {
+        Ok (()) => {
+            println!("Populated html template");
+        },
+        Err (e) => {
+            println!("failed to populate html: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    
 
 
     let parse_media_config = {
