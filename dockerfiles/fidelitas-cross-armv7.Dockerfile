@@ -1,10 +1,5 @@
 FROM rust:1-buster
 
-# elm installation
-RUN wget https://github.com/elm/compiler/releases/download/0.19.0/binaries-for-linux.tar.gz
-RUN tar -xzvf binaries-for-linux.tar.gz
-RUN mv elm /usr/bin/elm
-
 # rust armv7 target
 RUN rustup target add armv7-unknown-linux-gnueabihf
 
