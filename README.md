@@ -2,17 +2,25 @@
 
 a modern network music player 
 
+![Build Status x64 Linux](https://github.com/nicmr/fidelitas/workflows/x86_64-unknown-linux-gnu/badge.svg) 
+![Build Status armv7 Linux](https://github.com/nicmr/fidelitas/workflows/armv7-unknown-linux-gnueabihf/badge.svg)
+![Build Status x64 Windows](https://github.com/nicmr/fidelitas/workflows/x86_64-pc-windows-tbd/badge.svg) 
 
-[![Build Status](https://travis-ci.org/nicmr/fidelitas.svg?branch=master)](https://travis-ci.org/nicmr/fidelitas)
 
 ## Features
 
 WIP
 
 
-## Requirements
+## Runtime requirements
 
-Fidelitas requires [libVLC](https://wiki.videolan.org/LibVLC) to compile and run.
+- [libVLC](https://wiki.videolan.org/LibVLC)
+
+## Development requirements
+
+- Cargo / Rust
+- Elm
+- [libVLC](https://wiki.videolan.org/LibVLC)
 
 ## Building
 
@@ -21,14 +29,14 @@ git clone https://github.com/nicmr/fidelitas
 cargo build --release
 ```
 
-
 ## Binary Releases
 
-I'm providing stable precompiled binary releases via github releases.
-Find the newest release [here](https://github.com/nicmr/fidelitas/releases).
+We're providing precompiled binary releases via github releases.
+Find the newest releases at [here](https://github.com/nicmr/fidelitas/releases).
 
-Currently provided binaries:
+Planned releases:
  - x64-linux
- - armv7-linux (crosscompiling on travis CI remains broken for the moment.)
+ - armv7-linux
+ - x64-windows
 
 For other platforms, you will need to compile the source code manually.
