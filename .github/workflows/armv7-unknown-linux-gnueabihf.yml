@@ -1,0 +1,34 @@
+name: CI
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+      
+    - name: Setup Elm
+      uses: justgook/setup-elm@v1
+      with:
+        # Version of Elm to use
+        elm-version: 0.19.1
+        # elm-home: # optional
+        # cache: # optional, default is true
+          
+    - name: Compile Elm
+      run: elm make elm-src/Main.elm --output=controls.js
+      
+    - name: Create subdirectory for cross compilation artifacts
+      run: mkdir cross-artifacts
+      
+    - name: Build cross-compile-container
+      run: docker build -f dockerfiles/fidelitas-cross-armv7.Dockerfile -t fidelitas-cross-armv7 .
+      
+    - name: Run cross-compile-container
+      run: docker run -v $PWD/cross-artifacts:/artifacts:rw fidelitas-cross-armv7
+    
+    - name: List generated cross compilation artifacts
+      run: ls -la ./cross-artifacts
