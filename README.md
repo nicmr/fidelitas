@@ -26,6 +26,7 @@ WIP
 
 ```zsh
 git clone https://github.com/nicmr/fidelitas
+/bin/sh ./scripts/elm-make.sh
 cargo build --release
 ```
 
