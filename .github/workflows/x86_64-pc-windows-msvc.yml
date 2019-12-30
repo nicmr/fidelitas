@@ -26,6 +26,9 @@ jobs:
 #       run : $env:RUSTFLAGS = "-L $absolute_path"
       run : $env:RUSTFLAGS = "-L ./lib"
         
+    - name : Add .\lib to $env:LIB
+      run: $env:LIB = "$env:LIB;\a\fidelitas\fidelitas\lib;"
+        
     - name: Build
       run: cargo build --verbose
       
