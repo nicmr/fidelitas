@@ -19,13 +19,12 @@ jobs:
     - name: Extract libvlc for Windows
       run: 7z.exe e .\vlc-3.0.8-win64.7z vlc-3.0.8\sdk\lib -o".\lib"
        
-    - name: Set absolute path for rustflags
-      run : $absolute_path = ResolvePath -Path ".\lib"
+#     - name: Set absolute path for rustflags
+#       run : $absolute_path = ResolvePath -Path ".\lib"
       
     - name: Set RUSTFLAGS variable for linking libvlc.lib
-      run : $env:RUSTFLAGS = "-L $absolute_path"
-       
-        
+#       run : $env:RUSTFLAGS = "-L $absolute_path"
+      run : $env:RUSTFLAGS = "-L ./lib"
         
     - name: Build
       run: cargo build --verbose
