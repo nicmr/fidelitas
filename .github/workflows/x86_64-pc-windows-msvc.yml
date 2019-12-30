@@ -9,6 +9,20 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+
+    - name: Print values of environment variables possibly relevant for linker
+      run : |
+        echo $LIB
+        echo "-"
+        echo $env:LIB
+        echo "-"
+        echo $LIBPATH
+        echo "-"
+        echo $env:LIBPATH
+        echo "-"
+        echo $RUSTFLAGS
+        echo "-"
+        echo $env:RUSTFLAGS
      
     - name: mkdir lib
       run: mkdir lib
@@ -22,15 +36,18 @@ jobs:
 #     - name: Set absolute path for rustflags
 #       run : $absolute_path = ResolvePath -Path ".\lib"
       
-    - name: Set RUSTFLAGS variable for linking libvlc.lib
+    # - name: Set RUSTFLAGS variable for linking libvlc.lib
 #       run : $env:RUSTFLAGS = "-L $absolute_path"
-      run : $env:RUSTFLAGS = "-L ./lib"
+      # run : $env:RUSTFLAGS = "-L ./lib"
         
-    - name : Add .\lib to $env:LIB
-      run: $env:LIB = "$env:LIB;\a\fidelitas\fidelitas\lib;"
+    # - name : Add .\lib to $env:LIB
+      # run: $env:LIB = "$env:LIB;\a\fidelitas\fidelitas\lib;"
         
     - name: Build
       run: cargo build --verbose
+      env :
+        RUSTFLAGS: "-L ./lib"
+        LIB: "$env:LIB;\a\fidelitas\fidelitas\lib;"
       
     - name: Run tests
       run: cargo test --verbose
