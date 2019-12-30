@@ -14,11 +14,11 @@ jobs:
       run: |
         mkdir lib
         Invoke-WebRequest "download.videolan.org/pub/videolan/vlc/3.0.8/win64/vlc-3.0.8-win64.7z" -OutFile vlc-3.0.8-win64.7z
-        7z.exe e vlc-3.0.8-win64.7z
+        7z.exe e vlc-3.0.8-win64.7z -o ".\lib"
         
     - name: Set RUSTFLAGS variable for linking libvlc.lib
       run : |
-        $absolute_path = ResolvePath -Path "vlc-3.0.8-win64\vlc-3.0.8\sdk\lib"
+        $absolute_path = ResolvePath -Path ".\lib\vlc-3.0.8\sdk\lib"
         $env:RUSTFLAGS = "-L $absolute_path"
         
     - name: Build
