@@ -1,0 +1,30 @@
+name: x86_64-unknown-linux-gnu
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Setup Elm
+      uses: justgook/setup-elm@v1
+      with:
+        # Version of Elm to use
+        elm-version: 0.19.1
+        # elm-home: # optional
+        # cache: # optional, default is true
+    
+    - name: Install apt dependencies
+      run: sudo apt-get install libvlc-dev
+      
+    - name: Compile Elm
+      run: elm make elm-src/Main.elm --output=controls.js
+      
+    - name: Build
+      run: cargo build --verbose
+      
+    - name: Run tests
+      run: cargo test --verbose
