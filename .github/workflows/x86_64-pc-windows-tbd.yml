@@ -1,0 +1,16 @@
+name: x86_64-pc-windows-tbd
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: windows
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build
+      run: cargo build --verbose
+      
+    - name: Run tests
+      run: cargo test --verbose
