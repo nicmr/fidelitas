@@ -17,6 +17,8 @@ use regex::Regex;
 use serde::{Serialize, Deserialize};
 use serde_json;
 
+mod network_interfaces;
+
 
 type BasicError = &'static str;
 
@@ -262,6 +264,9 @@ fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::
     resp
 }
 
+
+
+
 fn main() {
 
     let matches = clap::App::new("Fidelitas")
@@ -303,8 +308,35 @@ fn main() {
 
     let port = matches.value_of("port").unwrap();
 
+    // select network interface and address
+    let host_address = match network_interfaces::ipv4() {
+        Err(e) => {
+            println!("Unable to detect network interfaces: {}", e);
+            std::process::exit(1);
+        },
+        Ok(available) => {
+            println!("Available network interfaces:{}", network_interfaces::pretty_print(available.clone()));
+            match network_interfaces::select_network_interface(available) {
+                None => {
+                    println!("No interfaces availble.:");
+                    std::process::exit(1);
+                },
+                Some(interface) => {
+                    println!("Auto-selected network interface: {}", interface.name);
+                    match interface.addr {
+                        None => {
+                            println!("Selected network interface has no IP adress");
+                            std::process::exit(1);
+                        }
+                        Some(address) => address
+                    }
+                }
+            }
+        }
+    };
+
     // populate html template
-    match populate_html_template("localhost", port) {
+    match populate_html_template(&host_address.ip().to_string(), port) {
         Ok (()) => {
             println!("Populated html template");
         },
