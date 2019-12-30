@@ -271,7 +271,7 @@ fn main() {
 
     let matches = clap::App::new("Fidelitas")
         .version("0.1")
-        .author("Nicolas Mohr <Nico.Mohr@gmx.net")
+        .author("Gwendolyn Mohr <gwen@gwenmohr.com>")
         .about("Network audio player")
         .arg(clap::Arg::with_name("port")
             .takes_value(true)
@@ -299,6 +299,12 @@ fn main() {
             .help("Explicitly allow file extensions to be read by the program. May cause crashes if files cannot be decoded.")
             .multiple(true)
         )
+        .arg(clap::Arg::with_name("interface")
+            .long("interface")
+            .takes_value(true)
+            .value_name("NETWORK_INTERFACE_NAME")
+            .help("Manually select the network interface users should access the application with.")
+        )
         .get_matches();
 
 
@@ -316,7 +322,8 @@ fn main() {
         },
         Ok(available) => {
             println!("Available network interfaces:{}", network_interfaces::pretty_print(available.clone()));
-            match network_interfaces::select_network_interface(available) {
+
+            match network_interfaces::select_network_interface(available, matches.value_of("interface")) {
                 None => {
                     println!("No interfaces availble.:");
                     std::process::exit(1);

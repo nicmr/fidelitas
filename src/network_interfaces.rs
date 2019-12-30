@@ -41,11 +41,21 @@ pub fn pretty_print(interfaces: Vec<ifaces::Interface>) -> String {
         .fold(String::from(""), pretty_acc)
 }
 
-pub fn select_network_interface (from: Vec<ifaces::Interface>) -> Option<ifaces::Interface> {
-    from
-        .into_iter()
-        .filter(|a| a.name.starts_with("en") || a.name.starts_with("wl") )
-        .next()
+pub fn select_network_interface (from: Vec<ifaces::Interface>, override_interface: Option<&str>) -> Option<ifaces::Interface> {
+    match override_interface {
+        None => {
+            from
+            .into_iter()
+            .filter(|a| a.name.starts_with("en") || a.name.starts_with("wl") )
+            .next()
+        }
+        Some(interface) => {
+            from
+            .into_iter()
+            .filter(|a| a.name.starts_with(interface))
+            .next()
+        }
+    }
 }
 
 pub fn ipv4 () -> Result<Vec<ifaces::Interface>, std::io::Error> {
