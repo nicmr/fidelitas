@@ -1,4 +1,4 @@
-name: x86_64-pc-windows-tbd
+name: x86_64-pc-windows-msvc
 
 on: [push]
 
@@ -9,21 +9,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-
-    - name: Print values of environment variables possibly relevant for linker
-      run : |
-        echo $LIB
-        echo "-"
-        echo $env:LIB
-        echo "-"
-        echo $LIBPATH
-        echo "-"
-        echo $env:LIBPATH
-        echo "-"
-        echo $RUSTFLAGS
-        echo "-"
-        echo $env:RUSTFLAGS
-     
+         
     - name: mkdir lib
       run: mkdir lib
       
@@ -32,16 +18,13 @@ jobs:
     
     - name: Extract libvlc for Windows
       run: 7z.exe e .\vlc-3.0.8-win64.7z vlc-3.0.8\sdk\lib -o".\lib"
-       
-#     - name: Set absolute path for rustflags
-#       run : $absolute_path = ResolvePath -Path ".\lib"
       
-    # - name: Set RUSTFLAGS variable for linking libvlc.lib
-#       run : $env:RUSTFLAGS = "-L $absolute_path"
-      # run : $env:RUSTFLAGS = "-L ./lib"
-        
-    # - name : Add .\lib to $env:LIB
-      # run: $env:LIB = "$env:LIB;\a\fidelitas\fidelitas\lib;"
+    - name: Rename vlc lib files (vlc.lib is not actually binary by default)
+      run: |
+        mv .\lib\vlc.lib vlc.lib.renamed
+        mv .\lib\vlccore.lib vlccore.lib.renamed
+        mv .\lib\libvlc.lib vlc.lib
+        mv .\lib\libvlccore.lib vlccore.lib
         
     - name: Build
       run: cargo build --verbose
