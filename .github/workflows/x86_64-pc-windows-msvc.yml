@@ -47,7 +47,7 @@ jobs:
       run: cargo build --verbose
       env :
         RUSTFLAGS: "-L ./lib"
-        LIB: "$env:LIB;\a\fidelitas\fidelitas\lib;"
+        LIB: "$env:LIB;\\a\\fidelitas\\fidelitas\\lib;"
       
     - name: Run tests
       run: cargo test --verbose
