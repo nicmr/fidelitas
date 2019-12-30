@@ -1,4 +1,4 @@
-name: CI
+name: armv7-unknown-linux-gnueabihf
 
 on: [push]
 
