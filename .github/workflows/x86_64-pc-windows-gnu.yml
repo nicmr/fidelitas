@@ -5,38 +5,30 @@ on: [push]
 jobs:
   build:
 
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v1
-
-    - name: Switch to MinGW compiler & gnu abi
-      run: |
-        rustup add stable-x86_64-pc-windows-gnu
-        rustup default stable-x86_64-pc-windows-gnu
-        # implicitly switches to MinGW because it triggers .cargo/config
-         
-    - name: mkdir lib
-      run: mkdir lib
       
-    - name: Download libvlc for Windows
-      run: Invoke-WebRequest "download.videolan.org/pub/videolan/vlc/3.0.8/win64/vlc-3.0.8-win64.7z" -OutFile vlc-3.0.8-win64.7z
+    - name: Setup Elm
+      uses: justgook/setup-elm@v1
+      with:
+        # Version of Elm to use
+        elm-version: 0.19.1
+        # elm-home: # optional
+        # cache: # optional, default is true
+          
+    - name: Compile Elm
+      run: elm make elm-src/Main.elm --output=controls.js
+      
+    - name: Create subdirectory for cross compilation artifacts
+      run: mkdir cross-artifacts
+      
+    - name: Build cross-compile-container
+      run: docker build -f dockerfiles/cross-x86_64-pc-windows-gnu.Dockerfile -t cross-x86_64-pc-windows-gnu .
+      
+    - name: Run cross-compile-container
+      run: docker run -v $PWD/cross-artifacts:/artifacts:rw cross-x86_64-pc-windows-gnu
     
-    - name: Extract libvlc for Windows
-      run: 7z.exe e .\vlc-3.0.8-win64.7z vlc-3.0.8\sdk\lib -o".\lib"
-      
-    - name: Rename vlc lib files (vlc.lib is not actually binary by default)
-      run: |
-        mv .\lib\vlc.lib vlc.lib.renamed
-        mv .\lib\vlccore.lib vlccore.lib.renamed
-        mv .\lib\libvlc.lib vlc.lib
-        mv .\lib\libvlccore.lib vlccore.lib
-
-    - name: Build
-      run: cargo build --verbose
-      env :
-        RUSTFLAGS: "-C link-arg=-L\\a\\fidelitas\\fidelitas\\lib"
-        LIB: "$env:LIB;\\a\\fidelitas\\fidelitas\\lib;"
-      
-    - name: Run tests
-      run: cargo test --verbose
+    - name: List generated cross compilation artifacts
+      run: ls -la ./cross-artifacts

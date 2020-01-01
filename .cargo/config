@@ -2,5 +2,5 @@
 linker = "arm-linux-gnueabihf-gcc"
 
 [target.x86_64-pc-windows-gnu]
-linker = "gcc.exe"
-ar = "ar.exe"
+linker = "/usr/bin/x86_64-w64-mingw32-ar"
+ar = "/usr/bin/x86_64-w64-mingw32-gcc"
