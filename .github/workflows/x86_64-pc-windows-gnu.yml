@@ -35,7 +35,7 @@ jobs:
     - name: Build
       run: cargo build --verbose
       env :
-        RUSTFLAGS: "-L ./lib"
+        RUSTFLAGS: "-C link-arg=-L./lib"
         LIB: "$env:LIB;\\a\\fidelitas\\fidelitas\\lib;"
       
     - name: Run tests
