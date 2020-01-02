@@ -4,7 +4,7 @@ a modern network music player
 
 ![Build Status x64 Linux](https://github.com/nicmr/fidelitas/workflows/x86_64-unknown-linux-gnu/badge.svg) 
 ![Build Status armv7 Linux](https://github.com/nicmr/fidelitas/workflows/armv7-unknown-linux-gnueabihf/badge.svg)
-![Build Status x64 Windows](https://github.com/nicmr/fidelitas/workflows/x86_64-pc-windows-tbd/badge.svg) 
+![Build Status x64 Windows](https://github.com/nicmr/fidelitas/workflows/x86_64-pc-windows-gnu/badge.svg) 
 
 
 ## Features
