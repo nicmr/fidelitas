@@ -18,7 +18,7 @@ jobs:
         # cache: # optional, default is true
     
     - name: Install apt dependencies
-      run: sudo apt-get install libvlc-dev
+      run: sudo apt-get -y install libvlc-dev
       
     - name: Compile Elm
       run: elm make elm-src/Main.elm --output=controls.js
