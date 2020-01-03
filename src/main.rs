@@ -198,7 +198,7 @@ impl ParseMediaConfig {
         // TODO: this can probably be written somewhat more efficiently by avoiding reallocation
         let extension_str = file_extensions.iter()
             .fold(String::with_capacity(len*4),|mut a, b| { a.push_str("|\\."); a.push_str(b); a});
-        let re_audio_extension = Regex::new(&format!(".+({})", &extension_str[2..])).unwrap();
+        let re_audio_extension = Regex::new(&format!(".+({})", &extension_str[2..])).expect("Failed to parse audio extension regex. This is a bug.");
         Self {
             extension_re: re_audio_extension,
         }        
@@ -216,9 +216,14 @@ fn parse_media_dir(mut id: u64, path: &Path, config: &ParseMediaConfig) -> Resul
                     id = new_id;
                     registered_media.extend(subdir_media);
                 } else {
-                    // TODO: handle properly instead of unwrap
-                    let path_str = good_entry.path().to_str().unwrap().to_string();
-                    if config.extension_re.is_match(good_entry.file_name().to_str().unwrap()) {
+                    // TODO: handle properly instead of expect
+                    let path_str = good_entry
+                        .path()
+                        .to_str()
+                        .expect("Failed to convert music folder subpath to string. This is a bug.")
+                        .to_string();
+
+                    if config.extension_re.is_match(good_entry.file_name().to_str().expect("Failed to convert filename in music folder to string. This is a bug.")) {
                         registered_media.insert(id, path_str);
                         id += 1;
                     } else {
@@ -308,11 +313,11 @@ fn main() {
         .get_matches();
 
 
-    let path = PathBuf::from(matches.value_of("dir").unwrap());
-    println!("Hosting files in folder: {}", path.to_str().unwrap());
+    let path = PathBuf::from(matches.value_of("dir").expect("Can't retrieve cli matches of flag 'dir'. This is a bug."));
+    println!("Hosting files in folder: {}", path.to_str().expect("Can't convert music folder path to string. This is a bug."));
 
 
-    let port = matches.value_of("port").unwrap();
+    let port = matches.value_of("port").expect("Can't retrieve cli matches of flag 'port'. This is a bug.");
 
     // select network interface and address
     let host_address = match network_interfaces::ipv4() {
@@ -399,8 +404,8 @@ fn main() {
         // player thread setup
         // TODO: move outside closure
 
-        let vlc_instance = vlc::Instance::new().unwrap();
-        let mediaplayer = vlc::MediaPlayer::new(&vlc_instance).unwrap();
+        let vlc_instance = vlc::Instance::new().expect("Failed to initialize vlc instance. This is a bug.");
+        let mediaplayer = vlc::MediaPlayer::new(&vlc_instance).expect("Failed to create vlc media player from vlc instance. This is a bug.");
 
         let mut ws_connections: HashSet<Addr<PlayerWs>> = HashSet::new();
         let (_media_max_id, registered_media) = parse_media_dir(0, &path, &parse_media_config).expect("Unable to read media dir.");
@@ -414,9 +419,11 @@ fn main() {
                         PlayerMsg::Play(track_id) => {
                             if let Some(track_path) = registered_media.get(&track_id) {
                                 println!("Received track on worker thread: k:'{}' V:'{}'", track_id, track_path);
-                                let md = vlc::Media::new_path(&vlc_instance, track_path).unwrap();
+                                // TODO: handle resiliently instead of expect
+                                let md = vlc::Media::new_path(&vlc_instance, track_path).expect("Failed to create vlc media from file path. This is a bug.");
                                 mediaplayer.set_media(&md);
-                                mediaplayer.play().unwrap();
+                                // TODO: handle resiliently instead of expect
+                                mediaplayer.play().expect("Failed to play selected vlc media. This is a bug.");
                                 broadcast(&ws_connections, OutgoingMsg::Play);
                             } else {
                                 println!("Received track request with invalid track_id: {}", track_id)
@@ -445,9 +452,9 @@ fn main() {
                             use vlc::MediaPlayerAudioEx;
                             use std::convert::TryInto;
 
-                            // TODO: ensure this unwrap can never fail by checking value first
-                            // TODO: replace with expect
-                            match mediaplayer.set_volume(volume.try_into().unwrap()) {
+                            // TODO:handle resiliently instead of expect
+                            // check value for i32 bounds (and limits given by vlc?)
+                            match mediaplayer.set_volume(volume.try_into().expect("Failed to convert volume change message. This is a bug.") {
                                 Ok(()) => {
                                    broadcast(&ws_connections, OutgoingMsg::VolumeChange{volume: volume});
                                 },
@@ -495,7 +502,8 @@ fn main() {
             )
     })
     .bind(format!("0.0.0.0:{}", port))
-    .unwrap()
+    // TODO: match instead and print specific error.
+    .expect("Failed to bind port. The port might be in use. Try and specify a free port manually with the -p flag.")
     .run()
-    .unwrap();
+    .expect("Failed to start actix system. This is a bug.");
 }
