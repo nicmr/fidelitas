@@ -29,8 +29,8 @@ impl fmt::Display for PrettyInterface{
 }
 
 fn pretty_acc(mut s: String, iface: PrettyInterface) -> String{
-    // unwrap should never fail as we're writing to a string
-    write!(s, "\n{}", iface).unwrap();
+    // expect should never fail as we're writing to a string
+    write!(s, "\n{}", iface).expect("Failed to prettyprint network interfaces. This is a bug.");
     s
 }
 
