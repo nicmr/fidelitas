@@ -454,7 +454,7 @@ fn main() {
 
                             // TODO:handle resiliently instead of expect
                             // check value for i32 bounds (and limits given by vlc?)
-                            match mediaplayer.set_volume(volume.try_into().expect("Failed to convert volume change message. This is a bug.") {
+                            match mediaplayer.set_volume(volume.try_into().expect("Failed to convert volume change message. This is a bug.")) {
                                 Ok(()) => {
                                    broadcast(&ws_connections, OutgoingMsg::VolumeChange{volume: volume});
                                 },
