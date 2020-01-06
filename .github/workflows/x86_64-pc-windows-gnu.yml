@@ -32,3 +32,17 @@ jobs:
     
     - name: List generated cross compilation artifacts
       run: ls -la ./cross-artifacts
+
+    - name: Zip generated cross compilation artifacts
+      run: |
+        mkdir release
+        cp ./cross-artifacts/* release/
+        cp -r ./static ./release/
+        cp -r ./templates ./release/
+        zip -r fidelitas_x64_win.zip ./release
+
+    - name: Upload windows build artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: fidelitas_x64_win.zip
+        path: ./fidelitas_x64_win.zip
