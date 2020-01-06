@@ -35,6 +35,6 @@ ENV RUSTFLAGS="-C link-args=-L/fidelitas/lib"
 
 CMD cargo build --target=x86_64-pc-windows-gnu \
     && cp /fidelitas/target/x86_64-pc-windows-gnu/debug/fidelitas.exe /artifacts \
-    && mv /vlc-3.0.8/libvlc.dll /artifacts
-    && mv /vlc-3.0.8/libvlccore.dll /artifacts
+    && mv /vlc-3.0.8/libvlc.dll /artifacts \
+    && mv /vlc-3.0.8/libvlccore.dll /artifacts \
     && ls /artifacts
