@@ -17,8 +17,7 @@ use regex::Regex;
 use serde::{Serialize, Deserialize};
 use serde_json;
 
-mod network_interfaces;
-
+use pnet::datalink::{interfaces, NetworkInterface};
 
 type BasicError = &'static str;
 
@@ -270,6 +269,25 @@ fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::
 }
 
 
+pub fn select_network_interface (from: &Vec<NetworkInterface>, override_interface: Option<&str>) -> Option<NetworkInterface> {
+    match override_interface {
+        None => {
+            from
+            .iter()
+            .filter(|a| a.name.starts_with("en") || a.name.starts_with("wl") )
+            .next()
+            .map(|a| a.clone())
+        }
+        Some(interface) => {
+            from
+            .into_iter()
+            .filter(|a| a.name.starts_with(interface))
+            .next()
+            .map(|a| a.clone())
+        }
+    }
+}
+
 
 
 fn main() {
@@ -320,35 +338,39 @@ fn main() {
     let port = matches.value_of("port").expect("Can't retrieve cli matches of flag 'port'. This is a bug.");
 
     // select network interface and address
-    let host_address = match network_interfaces::ipv4() {
-        Err(e) => {
-            println!("Unable to detect network interfaces: {}", e);
-            std::process::exit(1);
-        },
-        Ok(available) => {
-            println!("Available network interfaces:{}", network_interfaces::pretty_print(available.clone()));
+    let interface_candidates = interfaces();
 
-            match network_interfaces::select_network_interface(available, matches.value_of("interface")) {
-                None => {
-                    println!("No interfaces availble.:");
-                    std::process::exit(1);
-                },
-                Some(interface) => {
-                    println!("Auto-selected network interface: {}", interface.name);
-                    match interface.addr {
-                        None => {
-                            println!("Selected network interface has no IP adress");
-                            std::process::exit(1);
-                        }
-                        Some(address) => address
-                    }
-                }
+    let selected_interface = match select_network_interface(&interface_candidates, matches.value_of("interface")) {
+        Some (i) => i,
+        None => {
+            println!("Unable to autoselect a network interface. Please manually pass the --interface flag.\n Found the following interfaces:");
+            interface_candidates.iter().for_each(|a| println!("{}", a));
+            std::process::exit(1);
+        }
+    };
+
+    let host_address = {
+        let maybe_v4 =
+            selected_interface.ips
+            .iter()
+            .filter_map(|a| if let pnet::ipnetwork::IpNetwork::V4(ip) = a {Some(ip)} else {None})
+            .next()
+            .map(|a| a.ip());
+
+        match maybe_v4 {
+            Some(ip) => ip.to_string(),
+            None => {
+                println!("Unable to get ipv4 adress from selected network interfaces. Interface: {}", selected_interface);
+                std::process::exit(1);
             }
         }
     };
 
+
+
+    
     // populate html template
-    match populate_html_template(&host_address.ip().to_string(), port) {
+    match populate_html_template(&host_address, port) {
         Ok (()) => {
             println!("Populated html template");
         },
