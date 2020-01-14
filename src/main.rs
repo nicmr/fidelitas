@@ -5,7 +5,7 @@ use actix::{Actor, StreamHandler, Addr};
 
 use std::path::{Path, PathBuf};
 use std::thread;
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashSet, HashMap, VecDeque};
 
 use vlc;
 
@@ -14,11 +14,10 @@ use crossbeam_channel;
 use regex::Regex;
 // use lazy_static;
 
-use serde::{Serialize, Deserialize};
-use serde_json;
-
 mod network_interfaces;
 
+use serde::{Serialize, Deserialize};
+use serde_json;
 
 type BasicError = &'static str;
 
@@ -270,8 +269,6 @@ fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::
 }
 
 
-
-
 fn main() {
 
     let matches = clap::App::new("Fidelitas")
@@ -320,45 +317,50 @@ fn main() {
     let port = matches.value_of("port").expect("Can't retrieve cli matches of flag 'port'. This is a bug.");
 
     // select network interface and address
-    let host_address = match network_interfaces::ipv4() {
-        Err(e) => {
-            println!("Unable to detect network interfaces: {}", e);
+    let interface_candidates = match network_interfaces::interfaces() {
+        Some(candidates) => candidates,
+        None => {
+            eprintln!("Unable to detect network interfaces on your system.");
             std::process::exit(1);
-        },
-        Ok(available) => {
-            println!("Available network interfaces:{}", network_interfaces::pretty_print(available.clone()));
-
-            match network_interfaces::select_network_interface(available, matches.value_of("interface")) {
-                None => {
-                    println!("No interfaces availble.:");
-                    std::process::exit(1);
-                },
-                Some(interface) => {
-                    println!("Auto-selected network interface: {}", interface.name);
-                    match interface.addr {
-                        None => {
-                            println!("Selected network interface has no IP adress");
-                            std::process::exit(1);
-                        }
-                        Some(address) => address
-                    }
-                }
-            }
         }
     };
 
+    let selected_interface = match network_interfaces::select_network_interface(&interface_candidates, matches.value_of("interface")) {
+        Some (i) => i,
+        None => {
+            eprintln!("Unable to autoselect a network interface. Please manually pass the --interface flag.\n Found the following interfaces:");
+            interface_candidates.iter().for_each(|a| println!("{:?}", a));
+            std::process::exit(1);
+        }
+    };
+
+    let host_address = {
+        let sorted_ips = selected_interface.ip_addresses
+            .iter()
+            .fold(VecDeque::new(), network_interfaces::v4_first);
+
+        match sorted_ips.iter().next() {
+            Some(ip) => ip.to_string(),
+            None => {
+                eprintln!("Unable to get ipv4 adress from selected network interfaces. Interface: {:?}", selected_interface);
+                std::process::exit(1);
+            }
+        }
+            
+
+       
+    };
+
     // populate html template
-    match populate_html_template(&host_address.ip().to_string(), port) {
+    match populate_html_template(&host_address, port) {
         Ok (()) => {
             println!("Populated html template");
         },
         Err (e) => {
-            println!("failed to populate html: {}", e);
+            eprintln!("failed to populate html: {}", e);
             std::process::exit(1);
         }
     }
-
-    
 
 
     let parse_media_config = {

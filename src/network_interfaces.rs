@@ -1,67 +1,89 @@
-use ifaces;
-use std::fmt;
-use std::fmt::Write;
+use std::net::IpAddr;
+use std::collections::{VecDeque};
 
-#[derive(Clone, Debug)]
-struct PrettyInterface (pub ifaces::Interface);
+#[derive(Debug, Clone)]
+pub struct NetworkInterface {
+    pub name: String,
+    pub ip_addresses: Vec<IpAddr>,
+}
 
-impl fmt::Display for PrettyInterface{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+#[cfg(unix)]
+pub fn interfaces() -> Option<Vec<NetworkInterface>> {
+    let unix_adapters = ifaces::Interface::get_all();
 
-        let addr = {
-            match self.0.addr {
-                Some(address) => {
-                    let mut s = String::new();
-                    write!(s, "{}", address)?;
-                    s
-                }
-                None => String::from("Unknown")
-            }
-        };
-        write! (
-            f,
-            "Interface {{ name: {} Kind: {:?} Address: {} }}",
-            self.0.name,
-            self.0.kind,
-            addr
-        )
+    match unix_adapters {
+        Err(_)=> None,
+
+        Ok(adapters) => {
+            Some (
+                adapters
+                .iter()
+                .filter_map(|adapter| {
+                    match adapter.addr {
+                        None => None,
+                        Some(socket_addr) => {
+                            let mut addresses = Vec::with_capacity(1);
+                            addresses.push(socket_addr.ip());
+
+                            Some(NetworkInterface {
+                                name : adapter.name.clone(),
+                                ip_addresses : addresses
+                            })
+                        }
+                    }
+                })
+                .collect()
+            )
+        }
     }
 }
 
-fn pretty_acc(mut s: String, iface: PrettyInterface) -> String{
-    // expect should never fail as we're writing to a string
-    write!(s, "\n{}", iface).expect("Failed to prettyprint network interfaces. This is a bug.");
-    s
+#[cfg(windows)]
+pub fn interfaces() -> Option<Vec<NetworkInterface>> {
+    let win_adapters = ipconfig::get_adapters();
+
+    match win_adapters {
+        Err(_) => None,
+
+        Ok(adapters) => {
+            Some (
+                adapters
+                .iter()
+                .map(|adapter|
+                    NetworkInterface {
+                        name : adapter.adapter_name().to_owned(),
+                        ip_addresses : adapter.ip_addresses().to_vec(),
+                    }
+                )
+                .collect()
+            )
+        }
+    }
 }
 
-pub fn pretty_print(interfaces: Vec<ifaces::Interface>) -> String {
-    interfaces
-        .into_iter()
-        .map(|a| PrettyInterface(a))
-        .fold(String::from(""), pretty_acc)
-}
-
-pub fn select_network_interface (from: Vec<ifaces::Interface>, override_interface: Option<&str>) -> Option<ifaces::Interface> {
+pub fn select_network_interface (select_from: &Vec<NetworkInterface>, override_interface: Option<&str>) -> Option<NetworkInterface> {
     match override_interface {
         None => {
-            from
-            .into_iter()
+            select_from
+            .iter()
             .filter(|a| a.name.starts_with("en") || a.name.starts_with("wl") )
             .next()
+            .map(|a| a.clone())
         }
         Some(interface) => {
-            from
-            .into_iter()
+            select_from
+            .iter()
             .filter(|a| a.name.starts_with(interface))
             .next()
+            .map(|a| a.clone())
         }
     }
 }
 
-pub fn ipv4 () -> Result<Vec<ifaces::Interface>, std::io::Error> {
-    let interfaces = ifaces::ifaces()?
-        .into_iter()
-        .filter(|a| a.kind == ifaces::Kind::Ipv4)
-        .collect();
-    Ok(interfaces)
+pub fn v4_first (mut deque: VecDeque<IpAddr>, ip : &IpAddr) -> VecDeque<IpAddr> {
+    match ip {
+        IpAddr::V4(_) => deque.push_front(*ip),
+        IpAddr::V6(_) => deque.push_back(*ip),
+    }
+    deque
 }
