@@ -40,7 +40,6 @@ pub fn interfaces() -> Option<Vec<NetworkInterface>> {
 
 #[cfg(windows)]
 pub fn interfaces() -> Option<Vec<NetworkInterface>> {
-    use ipconfig;
     let win_adapters = ipconfig::get_adapters();
 
     match win_adapters {
@@ -52,8 +51,8 @@ pub fn interfaces() -> Option<Vec<NetworkInterface>> {
                 .iter()
                 .map(|adapter|
                     NetworkInterface {
-                        name : adapter.adapter_name.to_owned(),
-                        ip_addresses : ip_addresses.to_vec(),
+                        name : adapter.adapter_name().to_owned(),
+                        ip_addresses : adapter.ip_addresses().to_vec(),
                     }
                 )
                 .collect()
