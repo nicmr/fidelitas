@@ -21,7 +21,7 @@ jobs:
       run: sudo apt-get -y install libvlc-dev
       
     - name: Compile Elm
-      run: elm make elm-src/Main.elm --output=controls.js
+      run: elm make elm-src/Main.elm --output=./static/controls.js
       
     - name: Build
       run: cargo build --verbose
