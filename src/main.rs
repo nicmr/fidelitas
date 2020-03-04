@@ -253,15 +253,30 @@ fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: OutgoingMsg) {
 
 fn index(_req: HttpRequest) -> actix_web::Result<NamedFile> {
     let path: PathBuf = PathBuf::from("./static/index.html");
-    
     Ok(NamedFile::open(path)?)
 }
 
 fn controls(_req: HttpRequest) -> actix_web::Result<NamedFile> {
     let path: PathBuf = PathBuf::from("./static/controls.js");
-    
     Ok(NamedFile::open(path)?)
 }
+
+fn player_style(_req: HttpRequest) -> actix_web::Result<NamedFile> {
+    let path: PathBuf = PathBuf::from("./static/player.css");
+    Ok(NamedFile::open(path)?)
+}
+
+fn roboto_woff(_req: HttpRequest) -> actix_web::Result<NamedFile> {
+    let path: PathBuf = PathBuf::from("./static/fonts/roboto-v20-latin-ext_latin/roboto-v20-latin-ext_latin-regular.woff");
+    Ok(NamedFile::open(path)?)
+}
+
+fn roboto_woff2(_req: HttpRequest) -> actix_web::Result<NamedFile> {
+    let path: PathBuf = PathBuf::from("./static/fonts/roboto-v20-latin-ext_latin/roboto-v20-latin-ext_latin-regular.woff2");
+    Ok(NamedFile::open(path)?)
+}
+
+
 
 fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::Payload) -> actix_web::Result<HttpResponse, actix_web::Error> {
     let resp = ws::start(PlayerWs{ sender: state.sender.clone() }, &req, stream);
@@ -499,6 +514,10 @@ fn main() {
             .service(
                 web::scope("static")
                     .route("controls.js", web::get().to(controls))
+                    .route("player.css", web::get().to(player_style))
+                    .route("roboto-v20-latin-ext_latin-regular.woff2", web::get().to(roboto_woff2))
+                    .route("roboto-v20-latin-ext_latin-regular.woff", web::get().to(roboto_woff))
+
             )
     })
     .bind(format!("0.0.0.0:{}", port))

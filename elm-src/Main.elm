@@ -1,8 +1,9 @@
 port module Main exposing (main)
 
 import Browser
-import Html exposing (Html, button, div, text)
+import Html exposing (Html, button, div, text, i, progress, p)
 import Html.Attributes as Attr
+import Html.Attributes exposing (class)
 import Html.Events exposing (onClick, onInput)
 import Http
 import Url.Builder exposing (absolute, crossOrigin)
@@ -32,12 +33,13 @@ port websocketOut : String -> Cmd msg
 
 type Msg = Play (Maybe String) | Pause | Resume | Stop | VolumeSlider String |  WebsocketIn String
 
+type PlayerState = Paused | Playing | Stopped
 
 -- Model 
 
 type alias Model =
   { volume: Int
-  , player_state: PlayerState
+  , playerState: PlayerState
   , log: String
   , tracks: Dict String String
   , selected_track: String
@@ -48,7 +50,7 @@ init : () -> (Model, Cmd Msg)
 init _ =
   (
     { volume = 50
-    , player_state = Stopped
+    , playerState = Stopped
     , log = ""
     , tracks = Dict.empty
     -- better initial value possible?
@@ -58,7 +60,6 @@ init _ =
     , Cmd.none
   )
 
-type PlayerState = Paused | Playing | Stopped
 
 -- Update
 
@@ -123,10 +124,10 @@ update msg model =
                 Err _ ->  ({model | log = model.log ++ value ++ " error: payloadDecodeError"}, Cmd.none)
 
               Messages.In.RegisterSuccess -> ({model | log = model.log ++ value ++ " registerSuccess"}, Cmd.none)
-              Messages.In.Play -> ({model | player_state = Playing}, Cmd.none)
-              Messages.In.Resume -> ({model | player_state = Playing}, Cmd.none)
-              Messages.In.Pause -> ({model | player_state = Paused}, Cmd.none)
-              Messages.In.Stop -> ({model | player_state = Stopped}, Cmd.none)
+              Messages.In.Play -> ({model | playerState = Playing}, Cmd.none)
+              Messages.In.Resume -> ({model | playerState = Playing}, Cmd.none)
+              Messages.In.Pause -> ({model | playerState = Paused}, Cmd.none)
+              Messages.In.Stop -> ({model | playerState = Stopped}, Cmd.none)
               -- TODO: resume to last correct state on error message
               Messages.In.Error -> ({model | log = model.log ++ value ++ "server informed me invalid command has been sent"}, Cmd.none)
               _ -> (model, Cmd.none)
@@ -146,38 +147,76 @@ subscriptions _ =
 view : Model -> Html Msg
 view model =
   div []
-    [ button [ onClick (Play Nothing)] [text "Play"]
-    , button [ onClick Pause] [text "Pause"]
-    , button [ onClick Resume] [text "Resume"]
-    , button [ onClick Stop] [text "Stop"]
-    -- , toHtmlList model.tracks
-    , toDivList model.tracks
-    
-    , div []
-      [ Html.input
-        [ Attr.type_ "range"
-        , Attr.min "0"
-        , Attr.max "125"
-        , Attr.value <| String.fromInt model.volume
-        , onInput VolumeSlider
-        ] []
-      , text <| String.fromInt model.volume
+    [ toDivList model.tracks
+    , div [ class "log" ]
+      [ text <| "Volume: " ++ String.fromInt model.volume
       , div [] [ text "Log:"]
       , div [] [ text model.log]
+      ]
+    , div [ class "controls" ]
+      [ actionsIcons model
+      , progress [ Attr.value "20", Attr.max "100"] []
+      , div []
+        [ Html.input
+          [ Attr.type_ "range"
+          , Attr.min "0"
+          , Attr.max "125"
+          , Attr.step "5"
+          , Attr.value <| String.fromInt model.volume
+          , onInput VolumeSlider
+          ] []
+        ]
       ]
     ]
 
 -- View Helpers
 
+actionsDivs : Html Msg
+actionsDivs = 
+  div
+    [ class "actions"
+    ]
+    [ div [ onClick (Play Nothing), class "actionButton"]
+        [text "Play"]
+    , div [ onClick Pause, class "actionButton"]
+        [text "Pause"]
+    , div [ onClick Resume, class "actionButton"]
+        [text "Resume"]
+    , div [ onClick Stop, class "actionButton"]
+        [text "Stop"]
+    ]
+
+actionsIcons : Model -> Html Msg
+actionsIcons model =
+  let
+    pauseOrPlay = case model.playerState of
+      Playing -> i [ class "far fa-pause-circle", onClick Pause] []
+      _ -> i [ class "far fa-play-circle", onClick Resume ] []
+  in
+    div
+      [ class "actions" ]
+      [ p [ class "currently-playing" ] [ text <| Maybe.withDefault "" <| Dict.get model.selected_track model.tracks ]
+      , i [ class "fas fa-chevron-circle-left" ] []
+      , pauseOrPlay
+      , i [ class "fas fa-chevron-circle-right" ] []
+      ]
+
+
+
+
+
 toDivList : Dict String String -> Html Msg
 toDivList dict =
-  div [] (Dict.toList dict |> List.map toClickableDiv)
+  div
+    [ class "tracks"
+    ]
+    (Dict.toList dict |> List.map toClickableDiv)
 
 toClickableDiv : (String, String) -> Html Msg
 toClickableDiv (id, name) =
   div
     [ onClick (Play (Just id))
-    , Attr.style "cursor" "pointer"
+    , Attr.style "cursor" "pointer" --move to css?
     ]
     [ Html.p []
         [ text <| name
