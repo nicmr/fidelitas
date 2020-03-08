@@ -1,4 +1,2 @@
-# so far, all static files are generated from Elm or html templates
-# so no files in this directory should be commited
-*
-!.gitignore
+index.html
+*.js

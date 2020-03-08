@@ -1,0 +1,90 @@
+:root {
+    --player_background: #0a1a24;
+    --button_color: #faa700;
+    --sans-serif: 'Roboto', sans-serif;
+}
+
+/* roboto-regular - latin-ext_latin */
+@font-face {
+    font-family: 'Roboto';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Roboto'), local('Roboto-Regular'),
+         url('/static/roboto-v20-latin-ext_latin-regular.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */
+         url('/static/roboto-v20-latin-ext_latin-regular.woff') format('woff'); /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+}
+
+body {
+    background: var(--player_background);
+    font-family: var(--sans-serif);
+    color: white;
+}
+
+button {
+    background: var(--button_color);
+    border-color: var(--button_color);
+    color: white;
+}
+
+.tracks {
+    background: rgba(255, 255, 255, 0.1);
+}
+/* 
+.actions {
+    text-transform: uppercase;
+    padding: 10px;
+    display: flex;
+    flex-wrap: initial;
+    justify-content: space-evenly;
+    align-items: initial;
+    align-content: initial;
+    flex: 1 1 100%;
+} */
+
+
+.actions {
+    display: flex;
+    flex-wrap: initial;
+    justify-content: space-evenly;
+    align-items: initial;
+    align-content: initial;
+    flex: 1 1 100%;
+    margin: 100px 56px;
+    padding: 40px 56px;
+    margin-bottom: 20px;
+    /* width: 220px; */
+    /* margin-right: 20px; */
+
+
+  }
+
+/* .actionButton {
+    cursor: pointer;
+    display: flex;
+    flex-wrap: initial;c
+    justify-content: center;
+    align-items: center;
+    align-content: initial;
+    color: white;
+    background: var(--button_color);
+    border-radius: 3px;
+    padding: 10px;
+    text-transform: uppercase;
+    flex: 1 0 25%; 
+} */
+
+
+.actionButton {
+    display: flex;
+    flex-wrap: initial;
+    justify-content: center;
+    align-items: center;
+    align-content: initial;
+    color: white;
+    background: var(--button_color);
+    padding: 10px;
+    text-transform: uppercase;
+    border-radius: 3px;
+    margin: 5px;
+    flex: 1 0 15%;
+}

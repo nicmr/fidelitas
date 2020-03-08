@@ -1,32 +1,28 @@
+use std::path::{Path, PathBuf};
+use std::thread;
+use std::collections::{HashSet};
+
 use actix_web::{web, App, HttpResponse, HttpRequest, HttpServer};
 use actix_files::NamedFile;
 use actix_web_actors::ws;
-use actix::{Actor, StreamHandler, Addr};
-
-use std::path::{Path, PathBuf};
-use std::thread;
-use std::collections::{HashSet, HashMap};
+use actix::{Addr};
 
 use vlc;
-
 use crossbeam_channel;
 
-use regex::Regex;
-// use lazy_static;
-
-use serde::{Serialize, Deserialize};
-use serde_json;
-
 mod network_interfaces;
+mod websocket;
+mod vlc_helpers;
+mod media_fs;
 
-
-type BasicError = &'static str;
+use websocket::{OutgoingMsg, PlaybackState, PlayerWs, CurrentMedia};
+use media_fs::{ParseMediaConfig, parse_media_dir};
 
 pub struct AppState {
     sender: crossbeam_channel::Sender<PlayerMsg>,
 }
 
-enum PlayerMsg {
+pub enum PlayerMsg {
     Play(u64),
     Pause,
     Resume,
@@ -35,119 +31,6 @@ enum PlayerMsg {
     Unregister(Addr<PlayerWs>),
     VolumeChange(u64),
 }
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag="type")]
-enum IncomingMsg {
-    VolumeChange {volume: u64},
-    Play {track_id: u64},
-    Pause,
-    Stop,
-    Resume,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(tag="type")]
-enum OutgoingMsg {
-    Play,
-    Pause,
-    Resume,
-    Stop,
-    FsChange,
-    FsState{media: HashMap<u64, String>},
-    RegisterSuccess,
-    Error,
-    VolumeChange{volume: u64}
-}
-
-
-struct PlayerWs {
-    sender: crossbeam_channel::Sender<PlayerMsg>,
-}
-
-impl Actor for PlayerWs {
-    type Context = ws::WebsocketContext<Self>;
-}
-
-impl actix::Handler<OutgoingMsg> for PlayerWs {
-    type Result = Result<(), BasicError>;
-    fn handle(&mut self, msg: OutgoingMsg, ctx: &mut Self::Context) -> Self::Result {
-        ctx.text(serde_json::json!(msg).to_string());
-        Ok(())
-    }
-}
-
-impl StreamHandler<ws::Message, ws::ProtocolError> for PlayerWs {
-    fn started(&mut self, ctx: &mut Self::Context) {
-        // bring trait into scope for access to ctx.address()
-        use actix::AsyncContext;
-
-        let addr = ctx.address();
-        match self.sender.send(PlayerMsg::Register(addr)) {
-            Ok(()) => {
-                println!("Ws registered");
-            },
-            Err(e) => {
-                println!("Ws registration failed: {}", e);
-            },
-        }
-    }
-    fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
-
-        match msg {
-            ws::Message::Ping(msg) => ctx.pong(&msg),
-            ws::Message::Text(text) => {
-                println!("received:{}", &text);
-                let deserialized: serde_json::Result<IncomingMsg> = serde_json::from_str(&text);
-                match deserialized {
-                    Ok(msg) => {
-                        let send_result = match msg {
-                            IncomingMsg::VolumeChange{volume} => self.sender.send(PlayerMsg::VolumeChange(volume)),
-                            IncomingMsg::Play{track_id} => self.sender.send(PlayerMsg::Play(track_id)),
-                            IncomingMsg::Pause => self.sender.send(PlayerMsg::Pause),
-                            IncomingMsg::Stop => self.sender.send(PlayerMsg::Stop),
-                            IncomingMsg::Resume => self.sender.send(PlayerMsg::Resume),
-                        };
-                        match send_result {
-                            Ok(()) => {
-                                // everything good
-                            }
-                            Err(_) => {
-                                // TODO: Retry? Notify client?
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        println!("Failed to deserialize message: '{}'", &text);
-                        // TODO:inform client that message was not understood
-                    },
-                }
-            }
-            _ => (),
-        }
-    }
-    fn finished(&mut self, ctx: &mut Self::Context) {
-        //bring traits into scope for access to ctx.address() and ctx.stop()
-        use actix::AsyncContext;
-        use actix::ActorContext;
-
-        let addr = ctx.address();
-        match self.sender.send(PlayerMsg::Unregister(addr)) {
-            Ok(()) => {
-                println!("Ws unregistered");
-            },
-            Err(e) => {
-                println!("Ws unregistration failed: {}", e);
-            },
-        }
-        ctx.stop();
-    }
-}
-
-impl actix::Message for OutgoingMsg {
-    type Result = Result<(), BasicError>;
-}
-
 
 fn valid_directory(s: String) -> Result<(), String>{
     let path = Path::new(&s);
@@ -188,57 +71,6 @@ fn populate_html_template(ip: &str, port: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-
-struct ParseMediaConfig {
-    extension_re : regex::Regex,
-}
-impl ParseMediaConfig {
-    fn new(file_extensions: &HashSet<&str>) -> Self {
-        let len = file_extensions.len();
-        // TODO: this can probably be written somewhat more efficiently by avoiding reallocation
-        let extension_str = file_extensions.iter()
-            .fold(String::with_capacity(len*4),|mut a, b| { a.push_str("|\\."); a.push_str(b); a});
-        let re_audio_extension = Regex::new(&format!(".+({})", &extension_str[2..])).expect("Failed to parse audio extension regex. This is a bug.");
-        Self {
-            extension_re: re_audio_extension,
-        }        
-    }
-}
-
-fn parse_media_dir(mut id: u64, path: &Path, config: &ParseMediaConfig) -> Result<(u64, HashMap<u64, String>), std::io::Error>{
-    let mut registered_media: HashMap<u64, String> = HashMap::new();    
-    for entry in std::fs::read_dir(path)? {
-        match entry {
-            Ok(good_entry) => {
-                if good_entry.path().is_dir() {
-                    // TODO: handle result instead of escalating with ?
-                    let (new_id, subdir_media) = parse_media_dir(id, &good_entry.path(), config)?;
-                    id = new_id;
-                    registered_media.extend(subdir_media);
-                } else {
-                    // TODO: handle properly instead of expect
-                    let path_str = good_entry
-                        .path()
-                        .to_str()
-                        .expect("Failed to convert music folder subpath to string. This is a bug.")
-                        .to_string();
-
-                    if config.extension_re.is_match(good_entry.file_name().to_str().expect("Failed to convert filename in music folder to string. This is a bug.")) {
-                        registered_media.insert(id, path_str);
-                        id += 1;
-                    } else {
-                        println!("Ignoring file with unsupported file type in media directory: {}.", path_str)
-                    }
-                }
-            },
-            Err(e) => {
-                println!("Failed to read a file in the media directory: {}",e )
-            }
-        }
-    }
-    Ok((id, registered_media))
-}
-
 fn broadcast(connections: &HashSet<Addr<PlayerWs>>, msgkind: OutgoingMsg) {
     for conn in connections {
         match conn.try_send(
@@ -276,15 +108,11 @@ fn roboto_woff2(_req: HttpRequest) -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open(path)?)
 }
 
-
-
 fn api_websocket((req, state): (HttpRequest, web::Data<AppState>), stream: web::Payload) -> actix_web::Result<HttpResponse, actix_web::Error> {
     let resp = ws::start(PlayerWs{ sender: state.sender.clone() }, &req, stream);
     println!("{:?}", resp);
     resp
 }
-
-
 
 
 fn main() {
@@ -379,7 +207,7 @@ fn main() {
     let parse_media_config = {
         let mut extension_set : HashSet<&str> = HashSet::with_capacity(5);
         // add default extensions
-        // TODO: instead read from a default settings file
+        // TODO: instead read from a default config file
         extension_set.insert("mp3");
         extension_set.insert("ogg");
         extension_set.insert("opus");
@@ -414,54 +242,101 @@ fn main() {
     // receiver will be passed to the global player thread, 
     let (sender, receiver) = crossbeam_channel::unbounded();
 
-
     let _handle = thread::spawn(move || {
         // player thread setup
-        // TODO: move outside closure
 
+        let mut playback_state = PlaybackState::Stopped;
         let vlc_instance = vlc::Instance::new().expect("Failed to initialize vlc instance. This is a bug.");
         let mediaplayer = vlc::MediaPlayer::new(&vlc_instance).expect("Failed to create vlc media player from vlc instance. This is a bug.");
 
         let mut ws_connections: HashSet<Addr<PlayerWs>> = HashSet::new();
         let (_media_max_id, registered_media) = parse_media_dir(0, &path, &parse_media_config).expect("Unable to read media dir.");
 
-
         // channel handling loop
         loop {
             match receiver.recv() {
                 Ok(msg) => {
                     match msg {
-                        PlayerMsg::Play(track_id) => {
-                            if let Some(track_path) = registered_media.get(&track_id) {
-                                println!("Received track on worker thread: k:'{}' V:'{}'", track_id, track_path);
+                        PlayerMsg::Play(media_id) => {
+                            if let Some(track_path) = registered_media.get(&media_id) {
+                                println!("Received track on worker thread: k:'{}' V:'{}'", media_id, track_path);
                                 // TODO: handle resiliently instead of expect
                                 let md = vlc::Media::new_path(&vlc_instance, track_path).expect("Failed to create vlc media from file path. This is a bug.");
                                 mediaplayer.set_media(&md);
+
                                 // TODO: handle resiliently instead of expect
                                 mediaplayer.play().expect("Failed to play selected vlc media. This is a bug.");
-                                broadcast(&ws_connections, OutgoingMsg::Play);
+                                
+                                playback_state = PlaybackState::Playing{current_media: CurrentMedia::new(media_id, &mediaplayer)};
+
+                                broadcast(&ws_connections, OutgoingMsg::PlaybackChange {playback_state: playback_state});
                             } else {
-                                println!("Received track request with invalid track_id: {}", track_id)
+                                println!("Received track request with invalid track_id: {}", media_id)
                             }                            
                         },
                         PlayerMsg::Pause => {
                             mediaplayer.pause();
-                            broadcast(&ws_connections, OutgoingMsg::Pause);
+                            match playback_state {
+                                PlaybackState::Playing{current_media} => {
+                                    playback_state = PlaybackState::Paused{current_media:current_media};
+                                    broadcast(&ws_connections, OutgoingMsg::PlaybackChange{playback_state: playback_state});
+                                }
+                                PlaybackState::Paused {current_media: _} => {
+                                    println!("received pause message but is already paused");
+                                    // frontend state might be corrupted, send correct state to frontend?
+                                }
+                                PlaybackState::Stopped => {
+                                    println!("received pause message but is stopped");
+                                    // frontend state might be corrupted, send correct state to frontend?
+                                }
+                            }
                         },
                         // TODO: send more specific error message to client
                         PlayerMsg::Resume => {
-                            if mediaplayer.will_play() {
-                                match mediaplayer.play() {
-                                    Ok(()) => broadcast(&ws_connections, OutgoingMsg::Resume),
-                                    Err(()) => broadcast(&ws_connections, OutgoingMsg::Error)
+                            match playback_state {
+                                PlaybackState::Playing {current_media: _} => {
+                                    println!("Resume message received but already is already playing.");
+                                    // frontend state might be corrupted, send correct state to frontend?
                                 }
-                            } else {
-                                broadcast(&ws_connections, OutgoingMsg::Error)
+                                PlaybackState::Paused {current_media} => {
+                                    if mediaplayer.will_play() {
+                                        match mediaplayer.play() {
+                                            Ok(()) => {
+                                                playback_state = PlaybackState::Playing{current_media:current_media};
+                                                broadcast(&ws_connections, OutgoingMsg::PlaybackChange {playback_state});
+                                            },
+                                            Err(()) => {
+                                                println!("failed to play media");
+                                                broadcast(&ws_connections, OutgoingMsg::Error)
+                                            }
+                                        }
+                                    } else {
+                                        println!("player won't play media");
+                                        broadcast(&ws_connections, OutgoingMsg::Error)
+                                    }
+                                },
+                                PlaybackState::Stopped => {
+                                    println!("Pause message received but is stopped.")
+                                    // frontend state might be corrupted, send correct state to frontend?
+                                }
                             }
                         },
                         PlayerMsg::Stop => {
-                            mediaplayer.stop();
-                            broadcast(&ws_connections, OutgoingMsg::Stop);
+                            match playback_state {
+                                PlaybackState::Playing{current_media: _} => {
+                                    playback_state = PlaybackState::Stopped;
+                                    mediaplayer.stop();
+                                    broadcast(&ws_connections, OutgoingMsg::PlaybackChange{playback_state: playback_state});
+                                },
+                                PlaybackState::Paused{current_media: _} => {
+                                    playback_state = PlaybackState::Stopped;
+                                    mediaplayer.stop();
+                                },
+                                PlaybackState::Stopped => {
+                                    println!("Stop message received but is already stopped.")
+                                    // frontend state might be corrupted, send correct state to frontend?
+                                }
+                            }
                         },
                         PlayerMsg::VolumeChange(volume) => {
                             use vlc::MediaPlayerAudioEx;
@@ -477,10 +352,17 @@ fn main() {
                                     // TODO: log? retry?
                                 }
                             }
-                        }
+                        },
                         PlayerMsg::Register(ws) => {
                             ws_connections.insert(ws.clone());
-                            match ws.try_send(OutgoingMsg::FsState{media: registered_media.clone()}){
+                        
+                            match ws.try_send(
+                                OutgoingMsg::PlayerState{
+                                    playback_state: playback_state,
+                                    media: registered_media.clone()
+                                }
+                            )
+                            {
                                 Ok(_) => {},
                                 Err(e) => {println!("Failed to send FsChange message: {}", e)}
                             }
