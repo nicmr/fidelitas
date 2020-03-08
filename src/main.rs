@@ -278,7 +278,7 @@ fn main() {
                             mediaplayer.pause();
                             match playback_state {
                                 PlaybackState::Playing{current_media} => {
-                                    playback_state = PlaybackState::Paused{current_media:current_media};
+                                    playback_state = PlaybackState::Paused{current_media: CurrentMedia::new(current_media.id, &mediaplayer)};
                                     broadcast(&ws_connections, OutgoingMsg::PlaybackChange{playback_state: playback_state});
                                 }
                                 PlaybackState::Paused {current_media: _} => {
@@ -355,6 +355,15 @@ fn main() {
                         },
                         PlayerMsg::Register(ws) => {
                             ws_connections.insert(ws.clone());
+
+                            // update playback state if needed
+                            let playback_state = match playback_state {
+                                PlaybackState::Paused{current_media: _} => playback_state,
+                                PlaybackState::Stopped => playback_state,
+                                PlaybackState::Playing{current_media} => {
+                                    PlaybackState::new(current_media.id, &mediaplayer)
+                                }
+                            };
                         
                             match ws.try_send(
                                 OutgoingMsg::PlayerState{
@@ -364,7 +373,7 @@ fn main() {
                             )
                             {
                                 Ok(_) => {},
-                                Err(e) => {println!("Failed to send FsChange message: {}", e)}
+                                Err(e) => {println!("Failed to send PlayerState message: {}", e)}
                             }
                         },
                         PlayerMsg::Unregister(ws) => {

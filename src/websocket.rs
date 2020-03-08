@@ -37,15 +37,16 @@ pub enum OutgoingMsg {
 
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct CurrentMedia {
-    id: u64,
-    length: i64,
-    progress: i64
+    pub id: u64,
+    pub length: i64,
+    pub progress: i64
 }
 
 impl CurrentMedia {
     pub fn new (media_id : u64, mediaplayer: &vlc::MediaPlayer) -> Self {
         let media_length = unsafe { vlc_helpers::current_track_length(mediaplayer)};
         if let Some(media_progress) =  mediaplayer.get_time() {
+            println!("track progress: {}", media_progress);
             CurrentMedia {
                 id: media_id,
                 length: media_length,
