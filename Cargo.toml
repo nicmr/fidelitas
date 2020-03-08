@@ -24,4 +24,8 @@ regex = "1"
 serde = "1.0"
 serde_json = "1.0"
 
-ifaces = { git = "https://github.com/nicmr/rust-interfaces" }
+[target.'cfg(unix)'.dependencies]
+ifaces = "0.1.0"
+
+[target.'cfg(windows)'.dependencies]
+ipconfig = "0.2.1"

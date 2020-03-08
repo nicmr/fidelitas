@@ -19,7 +19,7 @@ jobs:
         # cache: # optional, default is true
           
     - name: Compile Elm
-      run: elm make elm-src/Main.elm --output=controls.js
+      run: elm make elm-src/Main.elm --output=./static/controls.js
       
     - name: Create subdirectory for cross compilation artifacts
       run: mkdir cross-artifacts
