@@ -1,38 +1,38 @@
-module Messages.In exposing (CurrentMedia, PlaybackState(..), IncomingMessage(..), messageDecoder)
+module Messages.In exposing (CurrentMedia, PlaybackState(..), IncomingMessage(..), MediaMeta, messageDecoder)
 
 import Json.Decode exposing (field, succeed, fail, Decoder, string)
 import Dict exposing (Dict)
 
 
 type IncomingMessage = RegisterSuccess 
-    -- | Play Int Int
-    -- | Pause
-    -- | Resume
-    -- | Stop
     | PlaybackChange PlaybackState
     | FsChange
-    | PlayerState PlaybackState (Dict String String)
+    | PlayerState PlaybackState (Dict String MediaMeta)
     | Error
     | VolumeChange Int
 
--- type MessageKind = RegisterSuccessKind
---     -- | PlayKind
---     -- | PauseKind
---     -- | ResumeKind
---     -- | StopKind
---     | PlaybackChangeKind
---     | FsChangeKind
---     | PlayerStateKind
---     | ErrorKind
---     | VolumeChangeKind
-
 type PlaybackState = Playing CurrentMedia | Paused CurrentMedia | Stopped
+
+type alias MediaMeta =
+  { length: Int
+  , title: String
+  , album: String
+  , artist: String
+  }
 
 type alias CurrentMedia =
   { id: Int
   , lengthMillis: Int
-  , progressMillis: Int
+  , progress: Int
   }
+
+decodeMediaMeta : Decoder MediaMeta
+decodeMediaMeta = 
+  Json.Decode.map4 MediaMeta
+    (field "length" Json.Decode.int )
+    (field "title" Json.Decode.string )
+    (field "album" Json.Decode.string )
+    (field "artist" Json.Decode.string )
 
 decodeCurrentMedia : Decoder CurrentMedia
 decodeCurrentMedia =
@@ -58,14 +58,11 @@ decodePlaybackState =
         fail <| "Can't decode playbackState"
     )
 
-
-
 messageDecoder : Decoder IncomingMessage
 messageDecoder =
   field "type" Json.Decode.string
   |> Json.Decode.andThen (\kind ->
     case kind of
-      -- "Play" -> playDecoder
       "PlayerState" -> playerStateDecoder
       "VolumeChange" -> volumeChangeDecoder
       "PlaybackChange" -> playbackChangeDecoder
@@ -80,20 +77,11 @@ playbackChangeDecoder =
   Json.Decode.map PlaybackChange
     ( field "playback_state" decodePlaybackState)
 
-
-
--- playDecoder : Decoder IncomingMessage
--- playDecoder =
---   Json.Decode.map2 Play
---     ( field "id" Json.Decode.int)
---     ( field "length" Json.Decode.int)
-
 playerStateDecoder : Decoder IncomingMessage
 playerStateDecoder =
   Json.Decode.map2 PlayerState
     ( field "playback_state" decodePlaybackState)
-    ( field "media" (Json.Decode.dict Json.Decode.string))
-
+    ( field "media" (Json.Decode.dict decodeMediaMeta))
 
 volumeChangeDecoder : Decoder IncomingMessage
 volumeChangeDecoder =

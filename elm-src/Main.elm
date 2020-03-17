@@ -10,7 +10,7 @@ import Dict exposing (Dict)
 import Time
 
 import Messages.In
-import Messages.In exposing (CurrentMedia, PlaybackState(..))
+import Messages.In exposing (CurrentMedia, PlaybackState(..), MediaMeta)
 import Messages.Out
 
 main =
@@ -37,7 +37,7 @@ type alias Model =
   { volume: Int
   , playbackState: PlaybackState
   , log: String
-  , allMedia: Dict String String
+  , allMedia: Dict String MediaMeta
   }
 
 mediaID : Maybe CurrentMedia -> Maybe Int
@@ -102,7 +102,7 @@ update msg model =
     PlayerTick ->
       case model.playbackState of
          Playing currentMedia -> 
-          ({model | playbackState = Playing  { currentMedia | progressMillis = min (currentMedia.progressMillis + 1000) currentMedia.lengthMillis} }, Cmd.none)
+          ({model | playbackState = Playing  { currentMedia | progress = min (currentMedia.progress + 1) (currentMedia.lengthMillis // 1000 ) } }, Cmd.none)
          _ ->
           (model, Cmd.none)
 
@@ -116,26 +116,16 @@ update msg model =
                 , allMedia = allMedia
                 , playbackState = playbackState
               }, Cmd.none)
+
             Messages.In.VolumeChange newVolume ->
               ({model | volume = newVolume}, Cmd.none)
 
             Messages.In.RegisterSuccess ->
               ({model | log = model.log ++ value ++ " registerSuccess"}, Cmd.none)
-            -- Messages.In.Play id lengthMillis ->
-            --   ({model | playbackState = Playing {id=id, lengthMillis = lengthMillis, progressMillis=0}}, Cmd.none)
-            -- -- Messages.In.Resume ->
-            -- --   let
-            -- --     newPlaybackState = case model.playbackState of
-            -- --       Playing a -> Playing a
-            -- --       Paused a -> Playing a
-            -- --       Stopped -> Stopped
-            -- --   in
-            -- --     ({model | playbackState = newPlaybackState}, Cmd.none)
-            -- Messages.In.Pause -> ({model | playbackState = Paused}, Cmd.none)
-            -- Messages.In.Stop -> ({model | playbackState = Stopped}, Cmd.none)
 
             Messages.In.PlaybackChange newPlaybackState ->
               ({ model | playbackState = newPlaybackState}, Cmd.none)
+
             -- resume to last correct state on error message? ask server for resync?
             Messages.In.Error ->
               ({model | log = model.log ++ value ++ "server informed me client has sent invalid message"}, Cmd.none)
@@ -162,10 +152,10 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
   div []
-    [ toDivList model.allMedia
+    [ mediaDivList model.allMedia
     , div [ class "log" ]
       [ p [ class "log-line" ] [ text <| "Volume: " ++ String.fromInt model.volume]
-      , p [ class "log-line" ] [ text <| "Track Length in seconds: " ++ ( String.fromInt <| trackLength model.playbackState ) ]
+      , p [ class "log-line" ] [ text <| "Track Length: " ++ (Maybe.withDefault "0" <| Maybe.map asMinutes<| currentMediaLength model) ]
       , div [] [ text "Log:"]
       , div [] [ text model.log]
       ]
@@ -187,45 +177,85 @@ view model =
 
 -- View Helpers
 
-trackLength : PlaybackState -> Int
-trackLength playbackState =
-  case playbackState of
-    Playing media -> media.lengthMillis
-    Paused media -> media.lengthMillis
-    Stopped -> 0
-
 progressBar : Model -> Html Msg
 progressBar model =
   case model.playbackState of
-    Playing media -> 
-      div []
-        [ progress [ Attr.value (String.fromInt (media.progressMillis // 1000)), Attr.max (String.fromInt (media.lengthMillis // 1000)), class "progress-bar"] []
-        , text <| "progress: " ++ String.fromInt media.progressMillis ++ " max length: " ++ String.fromInt media.lengthMillis
-        ]
+    Playing media ->
+      let
+        trackLengthStr =
+          currentMediaLength model
+          |> Maybe.map (\secs -> asMinutes secs)
+          |> Maybe.withDefault "0:00"
+      in
+        div []
+          [ progress
+            [ Attr.value (String.fromInt media.progress)
+            , Attr.max trackLengthStr
+            , class "progress-bar"
+            ] []
+          , text <| "progress: " ++ String.fromInt media.progress ++ " max length: " ++ trackLengthStr
+          ]
     Paused media ->
-      div []
-        [ progress [ Attr.value (String.fromInt (media.progressMillis // 1000)), Attr.max (String.fromInt (media.lengthMillis // 1000)), class "progress-bar"] []
-        , text <| "progress: " ++ String.fromInt media.progressMillis ++ " max length: " ++ String.fromInt media.lengthMillis
-        ]
+      let
+        trackLengthStr =
+          mediaLength model media.id
+          |> Maybe.map (\len -> String.fromInt len)
+          |> Maybe.withDefault "0"
+      in
+        div []
+          [ progress
+            [ Attr.value (String.fromInt media.progress)
+            , Attr.max trackLengthStr
+            , class "progress-bar"
+            ] []
+          , text <| "progress: " ++ String.fromInt media.progress ++ " max length: " ++ trackLengthStr
+          ]
     Stopped ->  progress [ Attr.value "0", Attr.max "100", class "progress-bar"] []
 
 
 
+{-| Returns the length in SECONDS of the media Item with the specified id
+Returns Nothing of no media is found for the specified id
+-}
+mediaLength : Model -> Int -> Maybe Int
+mediaLength model id =
+  String.fromInt id
+    |> (\id_ -> Dict.get id_ model.allMedia)
+    |> Maybe.map (\m -> m.length)
+    |> Maybe.map (\lenMillis -> lenMillis // 1000)  -- convert to seconds
 
-actionsDivs : Html Msg
-actionsDivs = 
-  div
-    [ class "actions"
-    ]
-    [ div [ onClick (Play Nothing), class "actionButton"]
-        [text "Play"]
-    , div [ onClick Pause, class "actionButton"]
-        [text "Pause"]
-    , div [ onClick Resume, class "actionButton"]
-        [text "Resume"]
-    , div [ onClick Stop, class "actionButton"]
-        [text "Stop"]
-    ]
+currentMediaLength : Model -> Maybe Int
+currentMediaLength model =
+  case model.playbackState of
+    Playing media -> mediaLength model media.id
+    Paused media -> mediaLength model media.id
+    Stopped -> Nothing
+
+{-| Returns a MM:SS representation of the passed seconds
+-}
+asMinutes : Int -> String
+asMinutes totalSeconds =
+  let
+    mins = totalSeconds // 60
+    secs = remainderBy 60 totalSeconds
+  in
+    String.fromInt mins ++ ":" ++ String.fromInt secs
+
+
+-- actionsDivs : Html Msg
+-- actionsDivs = 
+--   div
+--     [ class "actions"
+--     ]
+--     [ div [ onClick (Play Nothing), class "actionButton"]
+--         [text "Play"]
+--     , div [ onClick Pause, class "actionButton"]
+--         [text "Pause"]
+--     , div [ onClick Resume, class "actionButton"]
+--         [text "Resume"]
+--     , div [ onClick Stop, class "actionButton"]
+--         [text "Stop"]
+--     ]
 
 actionsIcons : Model -> Html Msg
 actionsIcons model =
@@ -241,35 +271,45 @@ actionsIcons model =
             Playing currentMedia ->
               currentMedia.id
               |> (\id -> Dict.get (String.fromInt id) model.allMedia)
-              |> Maybe.withDefault "track lookup failed"
-              |> text
+              |> Maybe.map viewMediaMeta
+              |> Maybe.withDefault (div [class "mediameta"] [])
             Paused currentMedia -> 
               currentMedia.id
               |> (\id -> Dict.get (String.fromInt id) model.allMedia)
-              |> Maybe.withDefault "track lookup failed"
-              |> text
+              |> Maybe.map viewMediaMeta
+              |> Maybe.withDefault (div [class "mediameta"] [])
             Stopped ->
-              text "None"
+              div [class "mediameta"] [text "<no active media>"]
         ]
       , i [ class "fas fa-chevron-circle-left" ] []
       , pauseOrPlay
       , i [ class "fas fa-chevron-circle-right" ] []
       ]
 
-toDivList : Dict String String -> Html Msg
-toDivList dict =
+viewMediaMeta : MediaMeta -> Html Msg
+viewMediaMeta media =
+  div [ class "mediameta"]
+    [ text <| "cheese" ]
+    -- [ text <| "Title: " ++ media.title
+    -- , text <| "Album: " ++ media.album
+    -- , text <| "Artist: " ++ media.artist
+    -- ]
+
+
+mediaDivList : Dict String MediaMeta -> Html Msg
+mediaDivList dict =
   div
     [ class "mediaList"
     ]
     (Dict.toList dict |> List.map toClickableDiv)
 
-toClickableDiv : (String, String) -> Html Msg
-toClickableDiv (id, name) =
+toClickableDiv : (String, MediaMeta) -> Html Msg
+toClickableDiv (id, media) =
   div
     [ onClick (Play (Just id))
     , Attr.style "cursor" "pointer" --move to css?
     ]
     [ Html.p []
-        [ text <| name
+        [ text <| media.title
         ]
     ]

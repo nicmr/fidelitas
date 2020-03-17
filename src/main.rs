@@ -8,6 +8,7 @@ use actix_web_actors::ws;
 use actix::{Addr};
 
 use vlc;
+use vlc::Meta;
 use crossbeam_channel;
 
 mod network_interfaces;
@@ -15,7 +16,7 @@ mod websocket;
 mod vlc_helpers;
 mod media_fs;
 
-use websocket::{OutgoingMsg, PlaybackState, PlayerWs, CurrentMedia};
+use websocket::{OutgoingMsg, PlaybackState, PlayerWs, CurrentMedia, MediaMeta};
 use media_fs::{ParseMediaConfig, parse_media_dir};
 
 pub struct AppState {
@@ -205,7 +206,7 @@ fn main() {
         }
     }
 
-
+   
     let parse_media_config = {
         let mut extension_set : HashSet<&str> = HashSet::with_capacity(5);
         // add default extensions
@@ -252,7 +253,7 @@ fn main() {
         let mediaplayer = vlc::MediaPlayer::new(&vlc_instance).expect("Failed to create vlc media player from vlc instance. This is a bug.");
 
         let mut ws_connections: HashSet<Addr<PlayerWs>> = HashSet::new();
-        let (_media_max_id, registered_media) = parse_media_dir(0, &path, &parse_media_config).expect("Unable to read media dir.");
+        let (_media_max_id, registered_media) = parse_media_dir(0, &path, &vlc_instance, &parse_media_config).expect("Unable to read media dir.");
 
         // channel handling loop
         loop {
@@ -260,12 +261,12 @@ fn main() {
                 Ok(msg) => {
                     match msg {
                         PlayerMsg::Play(media_id) => {
-                            if let Some(track_path) = registered_media.get(&media_id) {
-                                println!("Received track on worker thread: k:'{}' V:'{}'", media_id, track_path);
+                            if let Some((track_path, media)) = registered_media.get(&media_id) {
+                                println!("Received play request on worker thread: id:'{}' title:'{}' (path: {})", media_id, media.get_meta(Meta::Title).unwrap_or(String::from("<No title>")) , track_path);
                                 // TODO: handle resiliently instead of expect
-                                let md = vlc::Media::new_path(&vlc_instance, track_path).expect("Failed to create vlc media from file path. This is a bug.");
-                                mediaplayer.set_media(&md);
-
+                                // let md = vlc::Media::new_path(&vlc_instance, track_path).expect("Failed to create vlc media from file path. This is a bug.");
+                                mediaplayer.set_media(&media);
+ 
                                 // TODO: handle resiliently instead of expect
                                 mediaplayer.play().expect("Failed to play selected vlc media. This is a bug.");
                                 
@@ -367,10 +368,10 @@ fn main() {
                                 }
                             };
                         
-                            match ws.try_send(
+                            match ws.try_send( 
                                 OutgoingMsg::PlayerState{
                                     playback_state: playback_state,
-                                    media: registered_media.clone()
+                                    media: registered_media.iter().map(|(id, (_path, media))| (*id, MediaMeta::from_vlc_media(media))).collect()
                                 }
                             )
                             {

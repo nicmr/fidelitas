@@ -8,6 +8,7 @@ use actix::{StreamHandler, Actor};
 use actix_web_actors::ws;
 
 use crate::vlc_helpers;
+use vlc::Meta;
 use crate::{PlayerMsg};
 
 #[derive(Clone, Debug, Deserialize)]
@@ -29,11 +30,33 @@ pub enum OutgoingMsg {
     // Stop,
     FsChange,
     PlaybackChange{playback_state : PlaybackState},
-    PlayerState{playback_state: PlaybackState, media: HashMap<u64, String>}, //change type of media to MediaMetadata
+    PlayerState{playback_state: PlaybackState, media: HashMap<u64, MediaMeta>}, //change type of media to MediaMetadata
     RegisterSuccess,
     Error,
     VolumeChange{volume: u64}
 }
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MediaMeta {
+    length: i64,
+    title: String,
+    album: String,
+    artist: String,  
+}
+impl MediaMeta {
+    pub fn from_vlc_media(media: &vlc::Media) -> Self {
+        Self {
+            length: media.duration().unwrap_or(0),
+            title: media.get_meta(Meta::Title).unwrap_or(String::from("<No title>")),
+            album: media.get_meta(Meta::Album).unwrap_or(String::from("<No album>")),
+            artist: media.get_meta(Meta::Artist).unwrap_or(String::from("<No artist>")),
+        }
+    }
+}
+ 
+
+
+
 
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct CurrentMedia {
@@ -46,11 +69,11 @@ impl CurrentMedia {
     pub fn new (media_id : u64, mediaplayer: &vlc::MediaPlayer) -> Self {
         let media_length = unsafe { vlc_helpers::current_track_length(mediaplayer)};
         if let Some(media_progress) =  mediaplayer.get_time() {
-            println!("track progress: {}", media_progress);
+            println!("track progress: {} seconds", media_progress/1000);
             CurrentMedia {
                 id: media_id,
                 length: media_length,
-                progress: media_progress
+                progress: media_progress/1000
             }
         }
         else {

@@ -3,7 +3,10 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+
 use regex::{Regex};
+use vlc::Media;
+
 
 /// Describes the files that are recognized as media files
 pub struct ParseMediaConfig {
@@ -23,15 +26,16 @@ impl ParseMediaConfig {
 }
 
 /// Parses the files recognized as media files according to the ParseMediaConfig in the specified directory
-pub fn parse_media_dir(mut id: u64, path: &Path, config: &ParseMediaConfig) -> Result<(u64, HashMap<u64, String>), std::io::Error>{
-    let mut registered_media: HashMap<u64, String> = HashMap::new();    
+pub fn parse_media_dir(mut min_id: u64, path: &Path, vlc_instance: &vlc::Instance, config: &ParseMediaConfig) -> Result<(u64, HashMap<u64, (String, Media)>), std::io::Error>{
+    let mut registered_media: HashMap<u64, (String, Media)> = HashMap::new();    
     for entry in std::fs::read_dir(path)? {
         match entry {
             Ok(good_entry) => {
                 if good_entry.path().is_dir() {
+                    // recurse into subdirectory
                     // TODO: handle result instead of escalating with ?
-                    let (new_id, subdir_media) = parse_media_dir(id, &good_entry.path(), config)?;
-                    id = new_id;
+                    let (new_id, subdir_media) = parse_media_dir(min_id, &good_entry.path(), vlc_instance,config)?;
+                    min_id = new_id;
                     registered_media.extend(subdir_media);
                 } else {
                     // TODO: handle properly instead of expect
@@ -42,8 +46,12 @@ pub fn parse_media_dir(mut id: u64, path: &Path, config: &ParseMediaConfig) -> R
                         .to_string();
 
                     if config.extension_re.is_match(good_entry.file_name().to_str().expect("Failed to convert filename in music folder to string. This is a bug.")) {
-                        registered_media.insert(id, path_str);
-                        id += 1;
+                        if let Some(vlc_media) = vlc::Media::new_path(vlc_instance, good_entry.path()) {
+                            registered_media.insert(min_id, (path_str, vlc_media));
+                            min_id += 1;
+                        } else {
+                            println!("Found media file candidate but vlc failed to read the file.")
+                        }
                     } else {
                         println!("Ignoring file with unsupported file type in media directory: {}.", path_str)
                     }
@@ -54,5 +62,5 @@ pub fn parse_media_dir(mut id: u64, path: &Path, config: &ParseMediaConfig) -> R
             }
         }
     }
-    Ok((id, registered_media))
+    Ok((min_id, registered_media))
 }
