@@ -196,13 +196,13 @@ progressBar model =
         trackLength = Maybe.withDefault 0 ( currentMediaLength model )
       in
         div [ class "controls-progress" ]
-          [ text <| asMinutes media.progress
+          [ p [ class "controls-progress-progress" ] [ text <| asMinutes media.progress ]
           ,  progress
             [ Attr.value (String.fromInt media.progress)
             , Attr.max (String.fromInt trackLength)
             , class "progress-bar"
             ] []
-          , text <| asMinutes trackLength
+          , p [ class "controls-progress-total"] [ text <| asMinutes trackLength ]
           ]
     Paused media ->
       let
@@ -270,9 +270,15 @@ controlButtons model =
   in
     div
       [ class "controls-buttons" ]
-      [  i [ class "controls-prev fas fa-chevron-circle-left" ] []
-      , pauseOrPlay
-      , i [ class "controls-next fas fa-chevron-circle-right" ] []
+      [ div [ class "controls-container controls-container-prev" ]
+        [ i [ class "controls-prev fas fa-chevron-circle-left" ] []
+        ]
+      , div [ class "controls-container control-container-play"]
+        [ pauseOrPlay
+        ]
+      , div [ class "controls-container controls-container-next" ]
+        [ i [ class "controls-next fas fa-chevron-circle-right" ] []
+        ]
       ]
 
 

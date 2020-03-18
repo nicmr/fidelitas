@@ -37,8 +37,24 @@ body {
     grid-template-columns: repeat(5, 1fr);
 }
 
-.controls-prev {
+.controls-container {
+    display: flex;
+    justify-content: center;
+}
+
+.controls-container-prev {
     grid-column: 2;
+    background-color: rgb(245, 197, 108);
+
+}
+
+.controls-container-next {
+    grid-column: 4;
+    background-color: rgb(245, 197, 108);
+}
+
+.controls-prev {
+    
 }
 
 .controls-pause-play {
@@ -46,12 +62,13 @@ body {
 }
 
 .controls-next {
-    grid-column: 4;
 
 }
 
 .controls-progress {
-
+    display: flex;
+    justify-content: center;
+    flex-direction: row;
 }
 
 
