@@ -1,5 +1,6 @@
 body {
     background-color: lightblue;
+    margin: 0;
 }
 
 
@@ -20,6 +21,9 @@ body {
 } */
 
 .controls {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
     background-color: #a32828;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -28,12 +32,18 @@ body {
 
 .controls-center {
     background-color: orange;
+    /* display: flex;
     align-content: center;
-    flex-direction: column;
+    justify-content: space-around;
+    flex-direction: column; */
+    display: grid;
+    grid-template-rows: 1fr 1fr;
 }
 
 .controls-buttons {
+    grid-row: 1;
     display: grid;
+    font-size: 24px;
     grid-template-columns: repeat(5, 1fr);
 }
 
@@ -66,11 +76,20 @@ body {
 }
 
 .controls-progress {
+    grid-row: 2;
     display: flex;
     justify-content: center;
+    align-items: center;
     flex-direction: row;
 }
 
+.progress-bar {
+    /* margin-top: 10%; */
+    height: 0.5em;
+    width: 50%;
+    background-color: lightgray;
+    border: none;
+}
 
 progress::-moz-progress-bar {
     background: purple;
@@ -82,11 +101,7 @@ progress::-webkit-progress-value{
 
 
 
-.progress-bar {
-    height: 0.5em;
-    background-color: lightgray;
-    border: none;
-}
+
 
 .controls-volume {
     display: flex;
