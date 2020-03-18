@@ -198,18 +198,17 @@ progressBar model =
   case model.playbackState of
     Playing media ->
       let
-        trackLengthStr =
-          currentMediaLength model
-          |> Maybe.map (\secs -> asMinutes secs)
-          |> Maybe.withDefault "0:00"
+        trackLength = Maybe.withDefault 0 ( currentMediaLength model )
+        trackLengthMinutes = asMinutes trackLength
+
       in
         div []
           [ progress
             [ Attr.value (String.fromInt media.progress)
-            , Attr.max trackLengthStr
+            , Attr.max (String.fromInt trackLength)
             , class "progress-bar"
             ] []
-          , text <| "progress: " ++ String.fromInt media.progress ++ " max length: " ++ trackLengthStr
+          , text <| "progress: " ++ String.fromInt media.progress ++ " max length: " ++ trackLengthMinutes
           ]
     Paused media ->
       let
@@ -263,7 +262,7 @@ actionsIcons model =
     pauseOrPlay = case model.playbackState of
       Playing _ -> i [ class "far fa-pause-circle", onClick Pause] []
       Paused _ -> i [class "far fa-play-circle", onClick Resume] []
-      Stopped -> i [ class "far fa-play-circle", onClick Resume ] []
+      Stopped -> i [ class "far fa-play-circle", onClick (Play Nothing) ] []
   in
     div
       [ class "actions" ]
