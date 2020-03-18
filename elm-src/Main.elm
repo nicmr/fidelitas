@@ -229,8 +229,9 @@ volumeControl model =
       , Attr.step "5"
       , Attr.value <| String.fromInt model.volume
       , onInput VolumeSlider
+      , class "controls-volume-range"
       ] []
-    ,  i [ class "fas fa-volume-down" ] []
+    ,  i [ class "fas fa-volume-down controls-volume-icon" ] []
     ]
 
 {-| Returns the length in SECONDS of the media Item with the specified id

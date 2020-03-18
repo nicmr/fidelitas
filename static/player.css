@@ -54,7 +54,7 @@ body {
 }
 
 .controls-prev {
-    
+
 }
 
 .controls-pause-play {
@@ -72,11 +72,36 @@ body {
 }
 
 
+progress::-moz-progress-bar {
+    background: purple;
+}
+
+progress::-webkit-progress-value{
+    background: purple;
+}
+
+
+
+.progress-bar {
+    height: 0.5em;
+    background-color: lightgray;
+    border: none;
+}
+
 .controls-volume {
     display: flex;
     flex-direction: row-reverse;
     flex-wrap: nowrap;
     background-color: orchid;
+}
+
+.controls-volume-range {
+    width: 50%;
+}
+
+.controls-volume-icon {
+    /* TODO : make relative to parent size */
+    padding: 15px 12px 15px 0;
 }
 
 .controls-mediainfo {
