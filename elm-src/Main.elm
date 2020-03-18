@@ -154,8 +154,7 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
   div []
-    [ mediaDivList model.allMedia
-    , div [ class "log" ]
+    [ div [ class "log" ]
       [ p [ class "log-line" ] [ text <| "Volume: " ++ String.fromInt model.volume]
       , p [ class "log-line" ] [ text <| "Track Length: " ++ (Maybe.withDefault "0" <| Maybe.map asMinutes<| currentMediaLength model) ]
       , p [ class "log-line" ] [ text <| "Count of available media: " ++ String.fromInt (Dict.size  model.allMedia)]
@@ -163,6 +162,7 @@ view model =
       , div [] [ text "Message log:"]
       , viewLog model.log
       ]
+    , mediaDivList model.allMedia
     , div [ class "controls" ]
       [ actionsIcons model
       , progressBar model
@@ -199,8 +199,6 @@ progressBar model =
     Playing media ->
       let
         trackLength = Maybe.withDefault 0 ( currentMediaLength model )
-        trackLengthMinutes = asMinutes trackLength
-
       in
         div []
           [ progress
@@ -208,7 +206,7 @@ progressBar model =
             , Attr.max (String.fromInt trackLength)
             , class "progress-bar"
             ] []
-          , text <| "progress: " ++ String.fromInt media.progress ++ " max length: " ++ trackLengthMinutes
+          , text <| "progress: " ++ asMinutes media.progress ++ " max length: " ++ asMinutes trackLength
           ]
     Paused media ->
       let
@@ -300,7 +298,9 @@ mediaDivList dict =
   div
     [ class "mediaList"
     ]
+    -- (Dict.toList dict |> List.map (\(id, meta) -> Debug.log ( id) (id, meta)) |> List.map toClickableDiv)
     (Dict.toList dict |> List.map toClickableDiv)
+
 
 toClickableDiv : (String, MediaMeta) -> Html Msg
 toClickableDiv (id, media) =
