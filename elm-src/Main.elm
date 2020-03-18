@@ -36,7 +36,7 @@ type Msg = Play (Maybe String) | Pause | Resume | Stop | VolumeSlider String |  
 type alias Model =
   { volume: Int
   , playbackState: PlaybackState
-  , log: String
+  , log: List String
   , allMedia: Dict String MediaMeta
   }
 
@@ -50,7 +50,7 @@ init _ =
   (
     { volume = 50
     , playbackState = Stopped
-    , log = ""
+    , log = []
     , allMedia = Dict.empty
     -- better initial value possible?
     -- might want to change field to Maybe String
@@ -112,7 +112,7 @@ update msg model =
         Ok kind ->
           case kind of
             Messages.In.PlayerState playbackState allMedia ->
-              ({model | log = model.log ++ value ++ " payloadDecoded"
+              ({model | log =  ("PlayerState: " ++  value) :: model.log
                 , allMedia = allMedia
                 , playbackState = playbackState
               }, Cmd.none)
@@ -121,16 +121,18 @@ update msg model =
               ({model | volume = newVolume}, Cmd.none)
 
             Messages.In.RegisterSuccess ->
-              ({model | log = model.log ++ value ++ " registerSuccess"}, Cmd.none)
+              ({model | log = ("RegisterSuccess " ++ value) :: model.log}, Cmd.none)
 
             Messages.In.PlaybackChange newPlaybackState ->
-              ({ model | playbackState = newPlaybackState}, Cmd.none)
+              ({ model | playbackState = newPlaybackState,
+                         log = "PlaybackState:" :: model.log
+              }, Cmd.none)
 
             -- resume to last correct state on error message? ask server for resync?
             Messages.In.Error ->
-              ({model | log = model.log ++ value ++ "server informed me client has sent invalid message"}, Cmd.none)
+              ({model | log = "Error:" :: model.log}, Cmd.none)
             _ -> (model, Cmd.none)
-        Err _ -> ({model | log = model.log ++ value ++ " error: can't decode"}, Cmd.none)
+        Err _ -> ({model | log = ("Decoding Error:" ++ value) :: model.log}, Cmd.none)
 
 
 
@@ -156,8 +158,10 @@ view model =
     , div [ class "log" ]
       [ p [ class "log-line" ] [ text <| "Volume: " ++ String.fromInt model.volume]
       , p [ class "log-line" ] [ text <| "Track Length: " ++ (Maybe.withDefault "0" <| Maybe.map asMinutes<| currentMediaLength model) ]
-      , div [] [ text "Log:"]
-      , div [] [ text model.log]
+      , p [ class "log-line" ] [ text <| "Count of available media: " ++ String.fromInt (Dict.size  model.allMedia)]
+      , p [ class "log-line" ] [ text <| "Current state of player: " ++ viewPlaybackState model.playbackState ]
+      , div [] [ text "Message log:"]
+      , viewLog model.log
       ]
     , div [ class "controls" ]
       [ actionsIcons model
@@ -176,6 +180,18 @@ view model =
     ]
 
 -- View Helpers
+
+viewLog : List String -> Html Msg
+viewLog loglines =
+  div [] (List.foldr (\line acc -> p [ class "log-line" ] [ text <| line] :: acc) [] loglines) 
+
+
+viewPlaybackState : PlaybackState -> String
+viewPlaybackState pbs =
+  case pbs of
+    Playing _ -> "Playing"
+    Paused _ -> "Paused"
+    Stopped -> "Stopped"
 
 progressBar : Model -> Html Msg
 progressBar model =
@@ -241,28 +257,13 @@ asMinutes totalSeconds =
   in
     String.fromInt mins ++ ":" ++ String.fromInt secs
 
-
--- actionsDivs : Html Msg
--- actionsDivs = 
---   div
---     [ class "actions"
---     ]
---     [ div [ onClick (Play Nothing), class "actionButton"]
---         [text "Play"]
---     , div [ onClick Pause, class "actionButton"]
---         [text "Pause"]
---     , div [ onClick Resume, class "actionButton"]
---         [text "Resume"]
---     , div [ onClick Stop, class "actionButton"]
---         [text "Stop"]
---     ]
-
 actionsIcons : Model -> Html Msg
 actionsIcons model =
   let
     pauseOrPlay = case model.playbackState of
       Playing _ -> i [ class "far fa-pause-circle", onClick Pause] []
-      _ -> i [ class "far fa-play-circle", onClick Resume ] []
+      Paused _ -> i [class "far fa-play-circle", onClick Resume] []
+      Stopped -> i [ class "far fa-play-circle", onClick Resume ] []
   in
     div
       [ class "actions" ]
@@ -289,11 +290,10 @@ actionsIcons model =
 viewMediaMeta : MediaMeta -> Html Msg
 viewMediaMeta media =
   div [ class "mediameta"]
-    [ text <| "cheese" ]
-    -- [ text <| "Title: " ++ media.title
+    [ text <| "Title: " ++ media.title
     -- , text <| "Album: " ++ media.album
     -- , text <| "Artist: " ++ media.artist
-    -- ]
+    ]
 
 
 mediaDivList : Dict String MediaMeta -> Html Msg

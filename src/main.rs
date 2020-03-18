@@ -367,6 +367,8 @@ fn main() {
                                     PlaybackState::new(current_media.id, &mediaplayer)
                                 }
                             };
+
+                            println!("sending {} media items", registered_media.len());
                         
                             match ws.try_send( 
                                 OutgoingMsg::PlayerState{
