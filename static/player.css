@@ -12,7 +12,56 @@ body {
     background-color: grey;
 }
 
+
+/* .controls {
+    background-color: #a32828;
+    display: flex;
+    justify-content: space-around;
+} */
+
 .controls {
-    background-color: lightsalmon;
-    
+    background-color: #a32828;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+
+}
+
+.controls-center {
+    background-color: orange;
+    align-content: center;
+    flex-direction: column;
+}
+
+.controls-buttons {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+}
+
+.controls-prev {
+    grid-column: 2;
+}
+
+.controls-pause-play {
+    grid-column: 3;
+}
+
+.controls-next {
+    grid-column: 4;
+
+}
+
+.controls-progress {
+
+}
+
+
+.controls-volume {
+    display: flex;
+    flex-direction: row-reverse;
+    flex-wrap: nowrap;
+    background-color: orchid;
+}
+
+.controls-mediainfo {
+    background-color: yellowgreen;
 }

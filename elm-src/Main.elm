@@ -164,18 +164,12 @@ view model =
       ]
     , mediaDivList model.allMedia
     , div [ class "controls" ]
-      [ actionsIcons model
-      , progressBar model
-      , div []
-        [ Html.input
-          [ Attr.type_ "range"
-          , Attr.min "0"
-          , Attr.max "125"
-          , Attr.step "5"
-          , Attr.value <| String.fromInt model.volume
-          , onInput VolumeSlider
-          ] []
+      [ controlsMediaInfo model
+      , div [ class "controls-center" ]
+        [ controlButtons model
+        , progressBar model
         ]
+      , volumeControl model
       ]
     ]
 
@@ -186,6 +180,7 @@ viewLog loglines =
   div [] (List.foldr (\line acc -> p [ class "log-line" ] [ text <| line] :: acc) [] loglines) 
 
 
+-- TODO: rename to toString or something, funcs named view should be -> Html a
 viewPlaybackState : PlaybackState -> String
 viewPlaybackState pbs =
   case pbs of
@@ -200,32 +195,43 @@ progressBar model =
       let
         trackLength = Maybe.withDefault 0 ( currentMediaLength model )
       in
-        div []
-          [ progress
+        div [ class "controls-progress" ]
+          [ text <| asMinutes media.progress
+          ,  progress
             [ Attr.value (String.fromInt media.progress)
             , Attr.max (String.fromInt trackLength)
             , class "progress-bar"
             ] []
-          , text <| "progress: " ++ asMinutes media.progress ++ " max length: " ++ asMinutes trackLength
+          , text <| asMinutes trackLength
           ]
     Paused media ->
       let
-        trackLengthStr =
-          mediaLength model media.id
-          |> Maybe.map (\len -> String.fromInt len)
-          |> Maybe.withDefault "0"
+        trackLength = Maybe.withDefault 0 ( currentMediaLength model )
       in
         div []
-          [ progress
+          [ text <| asMinutes media.progress
+          ,  progress
             [ Attr.value (String.fromInt media.progress)
-            , Attr.max trackLengthStr
+            , Attr.max (String.fromInt trackLength)
             , class "progress-bar"
             ] []
-          , text <| "progress: " ++ String.fromInt media.progress ++ " max length: " ++ trackLengthStr
+          , text <| asMinutes trackLength
           ]
     Stopped ->  progress [ Attr.value "0", Attr.max "100", class "progress-bar"] []
 
-
+volumeControl : Model -> Html Msg
+volumeControl model =
+  div [ class "controls-volume" ]
+    [ Html.input
+      [ Attr.type_ "range"
+      , Attr.min "0"
+      , Attr.max "125"
+      , Attr.step "5"
+      , Attr.value <| String.fromInt model.volume
+      , onInput VolumeSlider
+      ] []
+    ,  i [ class "fas fa-volume-down" ] []
+    ]
 
 {-| Returns the length in SECONDS of the media Item with the specified id
 Returns Nothing of no media is found for the specified id
@@ -254,17 +260,27 @@ asMinutes totalSeconds =
   in
     String.fromInt mins ++ ":" ++ String.fromInt secs
 
-actionsIcons : Model -> Html Msg
-actionsIcons model =
+controlButtons : Model -> Html Msg
+controlButtons model =
   let
     pauseOrPlay = case model.playbackState of
-      Playing _ -> i [ class "far fa-pause-circle", onClick Pause] []
-      Paused _ -> i [class "far fa-play-circle", onClick Resume] []
-      Stopped -> i [ class "far fa-play-circle", onClick (Play Nothing) ] []
+      Playing _ -> i [ class "controls-pause-play far fa-pause-circle", onClick Pause] []
+      Paused _ -> i [class "controls-pause-play far fa-play-circle", onClick Resume] []
+      Stopped -> i [ class "controls-pause-play far fa-play-circle", onClick (Play Nothing) ] []
   in
     div
-      [ class "actions" ]
-      [ p [ class "currently-playing" ]
+      [ class "controls-buttons" ]
+      [  i [ class "controls-prev fas fa-chevron-circle-left" ] []
+      , pauseOrPlay
+      , i [ class "controls-next fas fa-chevron-circle-right" ] []
+      ]
+
+
+
+controlsMediaInfo : Model -> Html Msg
+controlsMediaInfo model =
+  div [class "controls-mediainfo"]
+    [ p [  ]
         [ case model.playbackState of
             Playing currentMedia ->
               currentMedia.id
@@ -279,10 +295,9 @@ actionsIcons model =
             Stopped ->
               div [class "mediameta"] [text "<no active media>"]
         ]
-      , i [ class "fas fa-chevron-circle-left" ] []
-      , pauseOrPlay
-      , i [ class "fas fa-chevron-circle-right" ] []
-      ]
+    ]
+
+
 
 viewMediaMeta : MediaMeta -> Html Msg
 viewMediaMeta media =
